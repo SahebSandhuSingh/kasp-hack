@@ -1,0 +1,203 @@
+{
+  "store_name": "FuelForge Supplements",
+  "products": [
+    {
+      "id": "p1",
+      "name": "ProForge Whey Protein Bar – Chocolate Fudge",
+      "price": 449,
+      "description": "Each ProForge Whey Protein Bar delivers 22g of whey protein isolate, 8g of dietary fiber, and only 4g of sugar per serving. Made with real cocoa, no artificial sweeteners, and fortified with B12 and D3. Perfect for post-workout recovery or a high-protein snack on the go. Individually foil-wrapped for freshness.",
+      "return_policy": "Full refund or replacement within 30 days of delivery. No questions asked.",
+      "shipping": "Free standard shipping on all orders. Express delivery (2-3 days) available at ₹49.",
+      "rating": 4.8,
+      "review_count": 312,
+      "reviews": [
+        "Best protein bar I've tried — doesn't taste chalky at all, genuinely delicious.",
+        "22g protein for ₹449 is unbeatable. Ordered 3 boxes already.",
+        "Fast shipping, great packaging, and the bar itself is filling and nutritious."
+      ],
+      "tags": ["whey protein", "post-workout", "chocolate", "high protein", "low sugar"],
+      "ingredients": "Whey Protein Isolate, Oats, Dark Chocolate Chips, Cocoa Powder, Tapioca Syrup, Almonds, Sunflower Oil, Natural Flavors, Vitamins B12 and D3.",
+      "is_vegan": false
+    },
+    {
+      "id": "p2",
+      "name": "CleanFuel Plant Protein Bar – Vanilla Almond",
+      "price": 399,
+      "description": "CleanFuel Plant Protein Bar is 100% vegan and made with pea protein and brown rice protein blend, delivering 20g of complete plant protein per bar. Only 5g of sugar, 0 artificial colors or flavors, gluten-free certified, and soy-free. Each bar contains 25% of your daily iron requirement. Ideal for vegans, vegetarians, and anyone seeking a clean-label protein snack.",
+      "return_policy": "Free returns accepted within 15 days. Replacement dispatched within 48 hours of return request.",
+      "shipping": "Free shipping on orders above ₹299. Delivered in 3-5 business days.",
+      "rating": 4.6,
+      "review_count": 198,
+      "reviews": [
+        "Finally a vegan bar that actually tastes good and hits 20g protein!",
+        "Love the clean ingredients — no weird chemicals. Will definitely reorder.",
+        "Shipping was fast and it arrived well-packaged. Really happy with this."
+      ],
+      "tags": ["vegan", "plant protein", "gluten-free", "soy-free", "clean label"],
+      "ingredients": "Pea Protein Isolate, Brown Rice Protein, Almonds, Vanilla Extract, Tapioca Fiber, Coconut Oil, Natural Sweetener (Erythritol), Iron (as Ferrous Fumarate).",
+      "is_vegan": true
+    },
+    {
+      "id": "p3",
+      "name": "IronMax High-Protein Crunch Bar – Peanut Butter",
+      "price": 479,
+      "description": "IronMax Crunch bars pack 25g of protein from a blend of whey concentrate and casein, designed to sustain amino acid delivery for up to 4 hours. Features a distinctive crispy rice layer coated in natural peanut butter and dark chocolate. No corn syrup, no hydrogenated oils. Tested by a third-party lab for heavy metals and banned substances. NSF Certified for Sport.",
+      "return_policy": "100% satisfaction guarantee. Return within 30 days for a full refund, no return shipping charges.",
+      "shipping": "Free shipping pan-India. Orders dispatched within 24 hours on business days.",
+      "rating": 4.7,
+      "review_count": 276,
+      "reviews": [
+        "The crunch is real — nothing like the soggy bars you usually get. Legit 25g protein.",
+        "NSF certified gives me confidence. My gym coach recommended it and he was right.",
+        "Peanut butter flavor is not too sweet, not too salty. Just right."
+      ],
+      "tags": ["whey protein", "casein", "peanut butter", "NSF certified", "crunch", "high protein"],
+      "ingredients": "Whey Protein Concentrate, Milk Protein (Casein), Peanut Butter (Dry Roasted Peanuts), Dark Chocolate Coating, Crispy Brown Rice, Cane Sugar, Cocoa Butter, Sea Salt.",
+      "is_vegan": false
+    },
+    {
+      "id": "p4",
+      "name": "NutriBlast Energy Bar – Mixed Berry",
+      "price": 289,
+      "description": "NutriBlast Mixed Berry bar is a convenient snack with 12g of protein. Contains oats, dried cranberries, and natural berry flavoring. Good for a mid-day snack.",
+      "return_policy": "Returns accepted within 7 days if the product is damaged.",
+      "shipping": "Shipping charges apply. Delivery within 5-7 business days.",
+      "rating": 3.9,
+      "review_count": 45,
+      "reviews": [
+        "Decent bar, nothing extraordinary but does the job.",
+        "A bit dry but the flavor is alright."
+      ],
+      "tags": ["energy bar", "mixed berry", "oats", "snack"],
+      "ingredients": "Oats, Whey Protein (12g), Dried Cranberries, Natural Berry Flavor, Honey, Sunflower Seeds.",
+      "is_vegan": false
+    },
+    {
+      "id": "p5",
+      "name": "SlimFit Keto Protein Bar – Dark Chocolate",
+      "price": 349,
+      "description": "SlimFit Keto Bar is designed for ketogenic dieters. Contains 18g of protein and only 3g of net carbs per bar. MCT oil added for sustained energy. Sugar-free and sweetened with stevia. No artificial colors.",
+      "return_policy": "Returns accepted within 10 days for unopened boxes.",
+      "shipping": "Free shipping for orders above ₹500. Otherwise ₹60 shipping fee.",
+      "rating": 4.1,
+      "review_count": 87,
+      "reviews": [
+        "Great for keto — finally a bar with so few net carbs.",
+        "The dark chocolate coating is a bit thin but the taste is good."
+      ],
+      "tags": ["keto", "low carb", "sugar-free", "MCT", "dark chocolate"],
+      "ingredients": "Whey Protein Isolate, MCT Oil Powder, Cocoa Mass, Stevia, Almonds, Inulin, Cocoa Butter.",
+      "is_vegan": false
+    },
+    {
+      "id": "p6",
+      "name": "GreenLeaf Organic Oat Bar",
+      "price": 199,
+      "description": "Organic oat bar with some protein. Natural ingredients. Good snack.",
+      "return_policy": null,
+      "shipping": null,
+      "rating": 3.2,
+      "review_count": 11,
+      "reviews": [],
+      "tags": ["organic", "oats", "snack"],
+      "ingredients": null,
+      "is_vegan": null
+    },
+    {
+      "id": "p7",
+      "name": "PowerZone Protein Bar – Strawberry Blast",
+      "price": 329,
+      "description": "Great protein bar. Buy now and get fit! Perfect for gym enthusiasts. Try it today!",
+      "return_policy": null,
+      "shipping": "Standard delivery",
+      "rating": 2.8,
+      "review_count": 6,
+      "reviews": [],
+      "tags": ["protein", "strawberry", "gym"],
+      "ingredients": null,
+      "is_vegan": null
+    },
+    {
+      "id": "p8",
+      "name": "BulkBeast Mass Gainer Bar – Caramel",
+      "price": 499,
+      "description": "BulkBeast is a mass gaining bar with 30g protein and 450 calories, designed for hardgainers looking to bulk. Contains whey concentrate, oats, and caramel flavoring. High calorie, high protein.",
+      "return_policy": null,
+      "shipping": "Delivery in 4-6 days. ₹80 shipping charge.",
+      "rating": 3.5,
+      "review_count": 22,
+      "reviews": [
+        "Good for bulking but a bit too sweet for my taste."
+      ],
+      "tags": ["mass gainer", "bulking", "high calorie", "caramel"],
+      "ingredients": "Whey Protein Concentrate, Rolled Oats, Caramel Flavoring, Cane Sugar, Palm Oil, Milk Solids.",
+      "is_vegan": false
+    },
+    {
+      "id": "p9",
+      "name": "ZenProtein Ayurvedic Bar – Ashwagandha Cocoa",
+      "price": 389,
+      "description": "Amazing product. Very healthy. Must buy for everyone. Great taste!!!",
+      "return_policy": null,
+      "shipping": null,
+      "rating": 2.5,
+      "review_count": 3,
+      "reviews": [],
+      "tags": ["ayurvedic", "ashwagandha", "cocoa"],
+      "ingredients": null,
+      "is_vegan": null
+    },
+    {
+      "id": "p10",
+      "name": "QuickFuel Protein Crisp Bar – Cookies & Cream",
+      "price": 459,
+      "description": "QuickFuel Protein Crisp Bar offers 21g of protein with a satisfying crunch. Made with whey protein crisps, white chocolate coating, and cocoa cookie pieces. Contains 6g fiber and 5g sugar. Free from artificial colors and flavors. Manufactured in an ISO-certified facility.",
+      "return_policy": "Easy returns within 14 days. Damaged or incorrect items get priority replacement within 24 hours.",
+      "shipping": "Free delivery across India on all orders. Shipped within 48 hours.",
+      "rating": 4.4,
+      "review_count": 134,
+      "reviews": [
+        "The crisp texture makes it feel like a treat, not a supplement. Highly recommend.",
+        "21g protein and only 5g sugar — that's hard to find at this price point.",
+        "Came well-sealed and ahead of delivery estimate. Great product and service."
+      ],
+      "tags": ["whey protein", "cookies and cream", "crispy", "low sugar", "high fiber"],
+      "ingredients": "Whey Protein Crisps (Whey Protein Isolate, Tapioca Starch), White Chocolate Coating (Cocoa Butter, Milk Solids), Cocoa Cookie Pieces, Tapioca Fiber, Natural Flavors.",
+      "is_vegan": false
+    },
+    {
+      "id": "p11",
+      "name": "MuscleMax Protein Bar – Mango Twist",
+      "price": 279,
+      "description": "Protein bar with mango flavor. Contains protein and carbs. Good for post-workout.",
+      "return_policy": null,
+      "shipping": null,
+      "rating": 3.1,
+      "review_count": 8,
+      "reviews": [
+        "Okay taste, nothing special."
+      ],
+      "tags": ["mango", "protein", "post-workout"],
+      "ingredients": null,
+      "is_vegan": null
+    },
+    {
+      "id": "p12",
+      "name": "VitalCore Fiber + Protein Bar – Coconut Cashew",
+      "price": 419,
+      "description": "VitalCore Fiber + Protein Bar combines 19g of whey protein with 10g of prebiotic fiber (inulin + chicory root) to support both muscle recovery and gut health. Sweetened with dates and a touch of coconut sugar — no stevia, no erythritol. Coated in 70% dark chocolate. Suitable for those with lactose sensitivity as it uses whey isolate.",
+      "return_policy": "Returns and full refunds accepted within 21 days. Free return pickup scheduled within 24 hours.",
+      "shipping": "Free express shipping (2-4 days) on all orders. Tracking link provided on dispatch.",
+      "rating": 4.5,
+      "review_count": 162,
+      "reviews": [
+        "The gut-friendly fiber actually makes a difference — no bloating unlike other protein bars.",
+        "Coconut cashew flavor is unique and genuinely tasty. 19g protein is solid.",
+        "Free return policy and fast shipping sealed the deal. Product quality is excellent."
+      ],
+      "tags": ["whey protein", "prebiotic", "gut health", "coconut", "fiber", "dark chocolate", "free shipping"],
+      "ingredients": "Whey Protein Isolate, Inulin (Chicory Root), Oats, Cashews, Desiccated Coconut, Dates, Coconut Sugar, Dark Chocolate (70% Cocoa), Cocoa Butter.",
+      "is_vegan": false
+    }
+  ]
+}
