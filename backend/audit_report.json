@@ -1,0 +1,291 @@
+{
+  "generated_at": "2026-04-11T10:04:01.701Z",
+  "query_bank": [
+    "best protein bar under ₹500 with free returns",
+    "high protein snack with good reviews",
+    "vegan protein bar with clear ingredients",
+    "protein bar with fast shipping",
+    "most trusted protein supplement with strong reviews",
+    "protein bar with no artificial ingredients",
+    "best value protein bar under ₹600"
+  ],
+  "products": [
+    {
+      "id": "p4",
+      "name": "NutriBlast Energy Bar – Mixed Berry",
+      "price": 289,
+      "inclusion_rate": 0,
+      "selected_count": 0,
+      "rejected_count": 7,
+      "fix_priority": "🔴 CRITICAL",
+      "issues": [
+        "missing_return_policy",
+        "missing_shipping_info",
+        "weak_social_proof",
+        "weak_description",
+        "missing_ingredients"
+      ],
+      "all_rejection_reasons": [
+        "This product has a low rating of 3.9/5, a very short return window of 7 days only for damaged products, and shipping charges apply, which does not fully meet the query's criteria for best quality and free returns.",
+        "Low review count (45 reviews) and relatively low protein content (12g) compared to other options",
+        "This product is not vegan as it contains whey protein and honey.",
+        "This product was rejected because it has a lower rating of 3.9/5, a less detailed description, and a weaker return policy that only accepts returns within 7 days if the product is damaged.",
+        "Low rating of 3.9/5, limited reviews (45), and a return policy that only accepts damaged products",
+        "This product has a low review count of 45, which is a weak trust signal, and its description does not explicitly mention the absence of artificial ingredients.",
+        "Low protein content (12g), low rating (3.9/5), and few reviews (45) make it an unattractive option for the 'best value protein bar' query"
+      ]
+    },
+    {
+      "id": "p5",
+      "name": "SlimFit Keto Protein Bar – Dark Chocolate",
+      "price": 349,
+      "inclusion_rate": 0,
+      "selected_count": 0,
+      "rejected_count": 7,
+      "fix_priority": "🔴 CRITICAL",
+      "issues": [
+        "missing_return_policy",
+        "missing_shipping_info",
+        "weak_social_proof",
+        "weak_description",
+        "missing_ingredients"
+      ],
+      "all_rejection_reasons": [
+        "The return policy is limited to unopened boxes within 10 days, and free shipping is only available for orders above ₹500, which does not meet the free returns and shipping criteria under ₹500.",
+        "Lower review count (87 reviews) and not the highest protein content (18g) among the options",
+        "This product is not vegan because it contains whey protein isolate.",
+        "This product was rejected because it has a lower rating of 4.1/5, and its shipping is not free for all orders, with a ₹60 shipping fee for orders below ₹500.",
+        "Lower rating of 4.1/5, fewer reviews (87), and a return policy that only accepts unopened boxes",
+        "The product description does not explicitly state that it has no artificial ingredients, only that it is sugar-free and sweetened with stevia.",
+        "Specific dietary focus (keto) might not align with all users, and the number of reviews (87) is lower compared to the top selected products"
+      ]
+    },
+    {
+      "id": "p6",
+      "name": "GreenLeaf Organic Oat Bar",
+      "price": 199,
+      "inclusion_rate": 0,
+      "selected_count": 0,
+      "rejected_count": 7,
+      "fix_priority": "🔴 CRITICAL",
+      "issues": [
+        "missing_return_policy",
+        "missing_shipping_info",
+        "weak_social_proof",
+        "weak_description",
+        "missing_ingredients"
+      ],
+      "all_rejection_reasons": [
+        "This product lacks specific details on its return policy, shipping, ingredients, and is vegan, making it an uncertain choice.",
+        "Missing return policy, shipping details, ingredients, and vegan status, along with a low review count (11 reviews) and vague product description",
+        "The product's ingredients, return policy, and shipping details are not specified, making it unreliable.",
+        "This product was rejected because its return policy, shipping details, and ingredients are not specified, and it has a low rating of 3.2/5 with very few reviews.",
+        "Missing return policy, shipping details, ingredients, and vegan status, along with a low rating of 3.2/5 and very few reviews (11)",
+        "This product's description is too vague, does not specify its ingredients, and lacks a clear return policy and shipping details.",
+        "Lack of specified return policy, shipping details, ingredients, and low rating (3.2/5) with very few reviews (11) raise significant concerns about reliability and trust"
+      ]
+    },
+    {
+      "id": "p7",
+      "name": "PowerZone Protein Bar – Strawberry Blast",
+      "price": 329,
+      "inclusion_rate": 0,
+      "selected_count": 0,
+      "rejected_count": 7,
+      "fix_priority": "🔴 CRITICAL",
+      "issues": [
+        "missing_return_policy",
+        "missing_shipping_info",
+        "weak_social_proof",
+        "weak_description",
+        "missing_ingredients"
+      ],
+      "all_rejection_reasons": [
+        "The product description is vague and promotional, lacks details on return policy and shipping, and has a low rating of 2.8/5 with very few reviews (6), indicating weak trust signals.",
+        "Missing return policy, ingredients, and vegan status, along with a very low review count (6 reviews) and a highly promotional but vague product description",
+        "The product lacks specific details about its ingredients, return policy, and shipping, and has a low review count, making it untrustworthy.",
+        "This product was rejected because its return policy and ingredients are not specified, its description is vague and promotional, and it has a low rating of 2.8/5 with very few reviews.",
+        "Vague description, missing return policy, ingredients, and vegan status, along with a low rating of 2.8/5 and very few reviews (6)",
+        "The product description is overly promotional without substance, lacks ingredient information, and has a very low review count of 6, which is a weak trust signal.",
+        "Vague description lacking nutritional details, unspecified return policy, and very low rating (2.8/5) with minimal reviews (6) indicate a product with insufficient information for consideration"
+      ]
+    },
+    {
+      "id": "p8",
+      "name": "BulkBeast Mass Gainer Bar – Caramel",
+      "price": 499,
+      "inclusion_rate": 0,
+      "selected_count": 0,
+      "rejected_count": 7,
+      "fix_priority": "🔴 CRITICAL",
+      "issues": [
+        "missing_return_policy",
+        "missing_shipping_info",
+        "weak_social_proof",
+        "weak_description",
+        "missing_ingredients",
+        "price_issue"
+      ],
+      "all_rejection_reasons": [
+        "This product is priced at ₹499, which is at the boundary of the budget, has an unspecified return policy, and charges ₹80 for shipping, which does not meet the free returns and shipping criteria.",
+        "Missing return policy and vegan status, along with a relatively low review count (22 reviews) and not specifically marketed as a high-protein snack",
+        "This product is not vegan as it contains whey protein concentrate and milk solids.",
+        "This product was rejected because its return policy is not specified, and it has a lower rating of 3.5/5 with a relatively low number of reviews.",
+        "Missing return policy, low rating of 3.5/5, and limited reviews (22), making it less trustworthy",
+        "This product does not explicitly state that it has no artificial ingredients, and its description focuses more on being a mass gainer rather than highlighting the absence of artificial ingredients.",
+        "High calorie and high protein content might not be suitable for all users seeking a standard protein bar, and the lack of specified return policy is a concern"
+      ]
+    },
+    {
+      "id": "p9",
+      "name": "ZenProtein Ayurvedic Bar – Ashwagandha Cocoa",
+      "price": 389,
+      "inclusion_rate": 0,
+      "selected_count": 0,
+      "rejected_count": 7,
+      "fix_priority": "🔴 CRITICAL",
+      "issues": [
+        "missing_return_policy",
+        "missing_shipping_info",
+        "weak_social_proof",
+        "weak_description",
+        "missing_ingredients"
+      ],
+      "all_rejection_reasons": [
+        "The product description is overly promotional without substance, lacks details on return policy and shipping, and has a very low rating of 2.5/5 with only 3 reviews, indicating very weak trust signals.",
+        "Missing return policy, shipping details, ingredients, and vegan status, along with a very low review count (3 reviews) and a highly promotional but vague product description",
+        "The product description is vague, ingredients are not specified, and there's no clear return or shipping policy, along with a very low review count.",
+        "This product was rejected because its return policy, shipping details, and ingredients are not specified, its description is vague and promotional, and it has a low rating of 2.5/5 with very few reviews.",
+        "Missing return policy, shipping details, ingredients, and vegan status, along with a low rating of 2.5/5 and very few reviews (3)",
+        "The product description is overly promotional and lacks substance, does not specify ingredients, and has no clear return policy or shipping details, with a very low review count of 3.",
+        "Description is overly promotional without providing substantial nutritional information, unspecified return policy, and very few reviews (3) with a low rating (2.5/5) make it untrustworthy"
+      ]
+    },
+    {
+      "id": "p10",
+      "name": "QuickFuel Protein Crisp Bar – Cookies & Cream",
+      "price": 459,
+      "inclusion_rate": 0,
+      "selected_count": 0,
+      "rejected_count": 7,
+      "fix_priority": "🔴 CRITICAL",
+      "issues": [
+        "missing_return_policy",
+        "missing_shipping_info",
+        "weak_social_proof",
+        "weak_description",
+        "missing_ingredients",
+        "price_issue"
+      ],
+      "all_rejection_reasons": [
+        "Although this product has a good description, return policy, and free shipping, its price at ₹459 and the fact that other selected products offer more comprehensive benefits and higher ratings led to its rejection.",
+        "Although it has a good protein content (21g) and reviews (4.4/5, 134 reviews), it was not selected due to slightly lower protein content and review ratings compared to the top choices",
+        "This product is not vegan because it contains whey protein crisps and milk solids.",
+        "This product was rejected because although it has a good rating and description, its shipping is not as fast as the selected products, and its price is relatively high compared to the selected products.",
+        "Although it has a good rating and description, its review count (134) is lower compared to the top selected products",
+        "Although this product has a detailed description, it does not explicitly state that it has no artificial ingredients, only that it is free from artificial colors and flavors.",
+        "Although it has a good rating and description, its protein content (21g) and price (₹459) are less competitive compared to the top selected products for the 'best value' query"
+      ]
+    },
+    {
+      "id": "p11",
+      "name": "MuscleMax Protein Bar – Mango Twist",
+      "price": 279,
+      "inclusion_rate": 0,
+      "selected_count": 0,
+      "rejected_count": 7,
+      "fix_priority": "🔴 CRITICAL",
+      "issues": [
+        "missing_return_policy",
+        "missing_shipping_info",
+        "weak_social_proof",
+        "weak_description",
+        "missing_ingredients"
+      ],
+      "all_rejection_reasons": [
+        "This product lacks specific details on its return policy, shipping, and has a low rating of 3.1/5 with very few reviews (8), indicating weak trust signals and insufficient information to ensure customer satisfaction.",
+        "Missing return policy, shipping details, ingredients, and vegan status, along with a very low review count (8 reviews) and a vague product description",
+        "The product lacks detailed information about its ingredients, has no specified return or shipping policy, and a low review count, making it an unreliable choice.",
+        "This product was rejected because its return policy and shipping details are not specified, its description is vague, and it has a low rating of 3.1/5 with very few reviews.",
+        "Missing return policy, shipping details, ingredients, and vegan status, along with a low rating of 3.1/5 and very few reviews (8)",
+        "The product description is too vague, lacks ingredient information, has no clear return policy or shipping details, and a low review count of 8, which is a weak trust signal.",
+        "Lack of detailed description, unspecified return policy, shipping details, and very few reviews (8) with a low rating (3.1/5) indicate a product lacking necessary information for consideration"
+      ]
+    },
+    {
+      "id": "p12",
+      "name": "VitalCore Fiber + Protein Bar – Coconut Cashew",
+      "price": 419,
+      "inclusion_rate": 14.3,
+      "selected_count": 1,
+      "rejected_count": 6,
+      "fix_priority": "🔴 CRITICAL",
+      "issues": [
+        "missing_return_policy",
+        "missing_shipping_info",
+        "weak_social_proof",
+        "weak_description",
+        "missing_ingredients",
+        "price_issue"
+      ],
+      "all_rejection_reasons": [
+        "While this product has a detailed description, good return policy, and free express shipping, its price at ₹419, although under ₹500, was outweighed by the selected products' overall value, ratings, and comprehensive benefits.",
+        "Although it has a good protein content (19g) and reviews (4.5/5, 162 reviews), it was not selected due to slightly lower protein content compared to the top choices",
+        "This product was rejected because although it has a good rating and description, its price is relatively high compared to the selected products, and its shipping, although fast, is not as prominently featured as in the selected products.",
+        "Although it has a good rating and description, its review count (162) is lower compared to the top selected products",
+        "Although this product has a detailed description and no artificial sweeteners, it does not explicitly state that it has no artificial ingredients in its description, which is a key query requirement.",
+        "Although it has a good rating and detailed description, its price (₹419) and specific focus on fiber and lactose sensitivity might not align with the broad 'best value protein bar' query for all users"
+      ]
+    },
+    {
+      "id": "p2",
+      "name": "CleanFuel Plant Protein Bar – Vanilla Almond",
+      "price": 399,
+      "inclusion_rate": 28.6,
+      "selected_count": 2,
+      "rejected_count": 5,
+      "fix_priority": "🟡 NEEDS WORK",
+      "issues": [
+        "missing_return_policy",
+        "missing_shipping_info",
+        "weak_social_proof",
+        "weak_description",
+        "price_issue"
+      ],
+      "all_rejection_reasons": [
+        "Although this product meets the price and free returns criteria, its shipping is not entirely free as it requires orders above ₹299, which might not always be the case for a single item purchase.",
+        "Although it has a good protein content (20g) and reviews (4.6/5, 198 reviews), it was not selected due to slightly lower protein content compared to the top choices",
+        "This product was rejected because its shipping is not as fast as the selected products, with delivery in 3-5 business days.",
+        "Although it has a good rating and description, its review count (198) is lower compared to the top selected products",
+        "Although it has a good rating and description, its price (₹399) and lower protein content (20g) compared to other options make it less favorable for the 'best value' query"
+      ]
+    },
+    {
+      "id": "p3",
+      "name": "IronMax High-Protein Crunch Bar – Peanut Butter",
+      "price": 479,
+      "inclusion_rate": 71.4,
+      "selected_count": 5,
+      "rejected_count": 2,
+      "fix_priority": "🟢 MINOR FIXES",
+      "issues": [],
+      "all_rejection_reasons": [
+        "This product is not vegan because it contains whey concentrate and casein.",
+        "Although this product has a detailed description and no artificial ingredients mentioned, it does not explicitly state that it has no artificial ingredients in its description."
+      ]
+    },
+    {
+      "id": "p1",
+      "name": "ProForge Whey Protein Bar – Chocolate Fudge",
+      "price": 449,
+      "inclusion_rate": 85.7,
+      "selected_count": 6,
+      "rejected_count": 1,
+      "fix_priority": "✅ PERFORMING WELL",
+      "issues": [],
+      "all_rejection_reasons": [
+        "This product is not vegan as it contains whey protein isolate."
+      ]
+    }
+  ]
+}
