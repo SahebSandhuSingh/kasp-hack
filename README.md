@@ -79,9 +79,8 @@ npm install
 ### 2. Configure environment variables
 
 ```bash
-cat > backend/.env << 'EOF'
+cat > backend/.env 
 GROQ_API_KEY=your_groq_api_key_here
-EOF
 ```
 
 ### 3. Generate audit data
