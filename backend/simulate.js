@@ -1,13 +1,13 @@
-require('dotenv').config();
+const path = require('path');
+require('dotenv').config({ path: path.resolve(__dirname, '..', '.env') });
 const axios = require('axios');
 const fs = require('fs');
-const path = require('path');
 
 // ──────────────────────────────────────────────
 // CONFIG
 // ──────────────────────────────────────────────
-const GROQ_API_KEY = process.env.GROQ_API_KEY;
-const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+const OPENAI_URL = 'https://api.openai.com/v1/chat/completions';
 const TEST_QUERY = "best protein bar under ₹500 with free returns";
 
 // ──────────────────────────────────────────────
@@ -94,9 +94,9 @@ Rules:
 // ──────────────────────────────────────────────
 // CALL GROQ API
 // ──────────────────────────────────────────────
-async function callGroq(systemPrompt, userPrompt) {
+async function callLLM(systemPrompt, userPrompt) {
   const requestBody = {
-    model: "llama-3.3-70b-versatile",
+    model: "gpt-4o-mini",
     messages: [
       { role: "system", content: systemPrompt },
       { role: "user", content: userPrompt }
@@ -105,10 +105,10 @@ async function callGroq(systemPrompt, userPrompt) {
     response_format: { type: "json_object" }
   };
 
-  const response = await axios.post(GROQ_URL, requestBody, {
+  const response = await axios.post(OPENAI_URL, requestBody, {
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${GROQ_API_KEY}`
+      'Authorization': `Bearer ${OPENAI_API_KEY}`
     }
   });
 
@@ -145,8 +145,8 @@ function printResults(query, result) {
 // ──────────────────────────────────────────────
 async function main() {
   try {
-    if (!GROQ_API_KEY || GROQ_API_KEY === 'your_api_key_here') {
-      console.error('ERROR: GROQ_API_KEY is not set. Please add your key to the .env file.');
+    if (!OPENAI_API_KEY || OPENAI_API_KEY === 'your_openai_api_key_here') {
+      console.error('ERROR: OPENAI_API_KEY is not set. Please add your key to the .env file.');
       process.exit(1);
     }
 
@@ -162,7 +162,7 @@ async function main() {
 
     let response;
     try {
-      response = await callGroq(systemPrompt, userPrompt);
+      response = await callLLM(systemPrompt, userPrompt);
     } catch (apiError) {
       console.error('Groq API call failed.');
       if (apiError.response) {

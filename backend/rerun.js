@@ -1,14 +1,14 @@
-require('dotenv').config();
+const path = require('path');
+require('dotenv').config({ path: path.resolve(__dirname, '..', '.env') });
 const axios = require('axios');
 const fs = require('fs');
-const path = require('path');
 const improvedProduct = require('./improve.js');
 
 // ──────────────────────────────────────────────
 // CONFIG
 // ──────────────────────────────────────────────
-const GROQ_API_KEY = process.env.GROQ_API_KEY;
-const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+const OPENAI_URL = 'https://api.openai.com/v1/chat/completions';
 const QUERY = "best protein bar under ₹500 with free returns";
 const TARGET_ID = "p7";
 
@@ -96,12 +96,12 @@ Rules:
 // ──────────────────────────────────────────────
 // CALL GROQ API
 // ──────────────────────────────────────────────
-async function callGroq(products, query) {
+async function callLLM(products, query) {
   const systemPrompt = buildSystemPrompt();
   const userPrompt = buildUserPrompt(query, products);
 
   const requestBody = {
-    model: "llama-3.3-70b-versatile",
+    model: "gpt-4o-mini",
     messages: [
       { role: "system", content: systemPrompt },
       { role: "user", content: userPrompt }
@@ -112,10 +112,10 @@ async function callGroq(products, query) {
 
   let response;
   try {
-    response = await axios.post(GROQ_URL, requestBody, {
+    response = await axios.post(OPENAI_URL, requestBody, {
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${GROQ_API_KEY}`
+        'Authorization': `Bearer ${OPENAI_API_KEY}`
       }
     });
   } catch (apiError) {
@@ -220,8 +220,8 @@ function printDelta(beforeResult, afterResult, originalProducts) {
 // ──────────────────────────────────────────────
 async function main() {
   try {
-    if (!GROQ_API_KEY || GROQ_API_KEY === 'your_api_key_here') {
-      console.error('ERROR: GROQ_API_KEY is not set. Please add your key to the .env file.');
+    if (!OPENAI_API_KEY || OPENAI_API_KEY === 'your_openai_api_key_here') {
+      console.error('ERROR: OPENAI_API_KEY is not set. Please add your key to the .env file.');
       process.exit(1);
     }
 
@@ -232,7 +232,7 @@ async function main() {
 
     // ── STEP 2: Run simulation with original data ──
     console.log('\n[1/2] Running simulation with ORIGINAL data...');
-    const beforeResult = await callGroq(originalProducts, QUERY);
+    const beforeResult = await callLLM(originalProducts, QUERY);
     console.log('      Done.');
 
     // ── STEP 3: Inject improved product ──
@@ -244,7 +244,7 @@ async function main() {
 
     // ── STEP 4: Run simulation with improved data ──
     console.log('\n[2/2] Running simulation with IMPROVED data...');
-    const afterResult = await callGroq(updatedProducts, QUERY);
+    const afterResult = await callLLM(updatedProducts, QUERY);
     console.log('      Done.');
 
     // ── STEP 5: Print delta ──

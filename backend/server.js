@@ -1,9 +1,9 @@
-require('dotenv').config();
+const path = require('path');
+require('dotenv').config({ path: path.resolve(__dirname, '..', '.env') });
 const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
 const fs = require('fs');
-const path = require('path');
 
 const app = express();
 const PORT = 3001;
@@ -14,8 +14,8 @@ app.use(express.json());
 // ──────────────────────────────────────────────
 // CONFIG
 // ──────────────────────────────────────────────
-const GROQ_API_KEY = process.env.GROQ_API_KEY;
-const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+const OPENAI_URL = 'https://api.openai.com/v1/chat/completions';
 const RERUN_QUERY = "best protein bar under ₹500 with free returns";
 const TARGET_ID = "p7";
 
@@ -103,9 +103,9 @@ Rules:
 - If description is vague or promotional without substance, flag it explicitly`;
 }
 
-async function callGroq(products, query) {
+async function callLLM(products, query) {
   const requestBody = {
-    model: "llama-3.3-70b-versatile",
+    model: "gpt-4o-mini",
     messages: [
       { role: "system", content: buildSystemPrompt() },
       { role: "user", content: buildUserPrompt(query, products) }
@@ -114,10 +114,10 @@ async function callGroq(products, query) {
     response_format: { type: "json_object" }
   };
 
-  const response = await axios.post(GROQ_URL, requestBody, {
+  const response = await axios.post(OPENAI_URL, requestBody, {
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${GROQ_API_KEY}`
+      'Authorization': `Bearer ${OPENAI_API_KEY}`
     }
   });
 
@@ -150,7 +150,7 @@ app.post('/api/simulate', async (req, res) => {
       return res.status(400).json({ error: 'query field is required' });
     }
     const products = loadProducts();
-    const result = await callGroq(products, query.trim());
+    const result = await callLLM(products, query.trim());
     res.json(result);
   } catch (err) {
     console.error('POST /api/simulate error:', err.message);
@@ -168,13 +168,13 @@ app.post('/api/rerun', async (req, res) => {
     const originalP7 = products.find(p => p.id === TARGET_ID);
 
     // BEFORE — original data
-    const beforeResult = await callGroq(products, RERUN_QUERY);
+    const beforeResult = await callLLM(products, RERUN_QUERY);
 
     // Inject improved product
     const updatedProducts = products.map(p => p.id === TARGET_ID ? improvedProduct : p);
 
     // AFTER — improved data
-    const afterResult = await callGroq(updatedProducts, RERUN_QUERY);
+    const afterResult = await callLLM(updatedProducts, RERUN_QUERY);
 
     // Find p7 in each result
     const beforeP7 = beforeResult.rejected.find(p => p.id === TARGET_ID)

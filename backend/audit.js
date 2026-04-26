@@ -1,13 +1,13 @@
-require('dotenv').config();
+const path = require('path');
+require('dotenv').config({ path: path.resolve(__dirname, '..', '.env') });
 const axios = require('axios');
 const fs = require('fs');
-const path = require('path');
 
 // ──────────────────────────────────────────────
 // CONFIG
 // ──────────────────────────────────────────────
-const GROQ_API_KEY = process.env.GROQ_API_KEY;
-const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+const OPENAI_URL = 'https://api.openai.com/v1/chat/completions';
 
 // ── STEP 1: Query bank ──
 const QUERIES = [
@@ -88,12 +88,12 @@ Rules:
 // ──────────────────────────────────────────────
 // CALL GROQ API (duplicated — do not import)
 // ──────────────────────────────────────────────
-async function callGroq(products, query) {
+async function callLLM(products, query) {
   const systemPrompt = buildSystemPrompt();
   const userPrompt = buildUserPrompt(query, products);
 
   const requestBody = {
-    model: "llama-3.3-70b-versatile",
+    model: "gpt-4o-mini",
     messages: [
       { role: "system", content: systemPrompt },
       { role: "user", content: userPrompt }
@@ -104,10 +104,10 @@ async function callGroq(products, query) {
 
   let response;
   try {
-    response = await axios.post(GROQ_URL, requestBody, {
+    response = await axios.post(OPENAI_URL, requestBody, {
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${GROQ_API_KEY}`
+        'Authorization': `Bearer ${OPENAI_API_KEY}`
       }
     });
   } catch (apiError) {
@@ -193,14 +193,14 @@ function diagnose(productStats) {
     const reasons = stat.all_rejection_reasons.join(' ').toLowerCase();
     const issues = new Set();
 
-    if (reasons.includes('return'))                                        issues.add('missing_return_policy');
-    if (reasons.includes('shipping') || reasons.includes('delivery'))     issues.add('missing_shipping_info');
-    if (reasons.includes('review') || reasons.includes('trust'))         issues.add('weak_social_proof');
+    if (reasons.includes('return')) issues.add('missing_return_policy');
+    if (reasons.includes('shipping') || reasons.includes('delivery')) issues.add('missing_shipping_info');
+    if (reasons.includes('review') || reasons.includes('trust')) issues.add('weak_social_proof');
     if (reasons.includes('description') || reasons.includes('vague') ||
-        reasons.includes('promotional'))                                   issues.add('weak_description');
-    if (reasons.includes('ingredient'))                                    issues.add('missing_ingredients');
+      reasons.includes('promotional')) issues.add('weak_description');
+    if (reasons.includes('ingredient')) issues.add('missing_ingredients');
     if (reasons.includes('price') || reasons.includes('budget') ||
-        reasons.includes('expensive'))                                     issues.add('price_issue');
+      reasons.includes('expensive')) issues.add('price_issue');
 
     stat.issues = Array.from(issues);
   });
@@ -211,9 +211,9 @@ function diagnose(productStats) {
 // ──────────────────────────────────────────────
 function assignPriority(stat) {
   const r = stat.inclusion_rate;
-  if (r <= 20)       return '🔴 CRITICAL';
-  if (r <= 50)       return '🟡 NEEDS WORK';
-  if (r <= 85)       return '🟢 MINOR FIXES';
+  if (r <= 20) return '🔴 CRITICAL';
+  if (r <= 50) return '🟡 NEEDS WORK';
+  if (r <= 85) return '🟢 MINOR FIXES';
   return '✅ PERFORMING WELL';
 }
 
@@ -241,7 +241,7 @@ function printReport(rankedProducts) {
     (rankedProducts.reduce((sum, p) => sum + p.inclusion_rate, 0) / totalProducts).toFixed(1)
   );
   const performingWell = rankedProducts.filter(p => p.inclusion_rate > 85).length;
-  const needingFixes   = rankedProducts.filter(p => p.inclusion_rate < 60).length;
+  const needingFixes = rankedProducts.filter(p => p.inclusion_rate < 60).length;
 
   console.log('\n=== MERCHANT AI AUDIT REPORT ===');
   console.log('Store: FitFuel Protein Store (mock)');
@@ -312,8 +312,8 @@ function saveReport(rankedProducts) {
 // ──────────────────────────────────────────────
 async function main() {
   try {
-    if (!GROQ_API_KEY || GROQ_API_KEY === 'your_api_key_here') {
-      console.error('ERROR: GROQ_API_KEY is not set. Please add your key to the .env file.');
+    if (!OPENAI_API_KEY || OPENAI_API_KEY === 'your_openai_api_key_here') {
+      console.error('ERROR: OPENAI_API_KEY is not set. Please add your key to the .env file.');
       process.exit(1);
     }
 
@@ -328,7 +328,7 @@ async function main() {
 
     for (let i = 0; i < QUERIES.length; i++) {
       const query = QUERIES[i];
-      const result = await callGroq(products, query);
+      const result = await callLLM(products, query);
       allResults.push({
         query,
         selected: result.selected,
