@@ -254,7 +254,7 @@ app.get('/api/audit', (req, res) => {
   }
 });
 
-// POST /api/simulate — run a single query against the full store
+// POST /api/simulate — run a single query against the full store (uses Groq)
 app.post('/api/simulate', async (req, res) => {
   try {
     const { query } = req.body;
@@ -262,31 +262,31 @@ app.post('/api/simulate', async (req, res) => {
       return res.status(400).json({ error: 'query field is required' });
     }
     const products = loadProducts();
-    const result = await callLLM(products, query.trim());
+    const result = await callGroq(products, query.trim());
     res.json(result);
   } catch (err) {
     console.error('POST /api/simulate error:', err.message);
     if (err.response) {
-      return res.status(502).json({ error: 'LLM API error', detail: err.response.data });
+      return res.status(502).json({ error: 'Groq API error', detail: err.response.data });
     }
     res.status(500).json({ error: err.message });
   }
 });
 
-// POST /api/rerun — before/after counterfactual for p7
+// POST /api/rerun — before/after counterfactual for p7 (uses Groq)
 app.post('/api/rerun', async (req, res) => {
   try {
     const products = loadProducts();
     const originalP7 = products.find(p => p.id === TARGET_ID);
 
     // BEFORE — original data
-    const beforeResult = await callLLM(products, RERUN_QUERY);
+    const beforeResult = await callGroq(products, RERUN_QUERY);
 
     // Inject improved product
     const updatedProducts = products.map(p => p.id === TARGET_ID ? improvedProduct : p);
 
     // AFTER — improved data
-    const afterResult = await callLLM(updatedProducts, RERUN_QUERY);
+    const afterResult = await callGroq(updatedProducts, RERUN_QUERY);
 
     // Find p7 in each result
     const beforeP7 = beforeResult.rejected.find(p => p.id === TARGET_ID)
