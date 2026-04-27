@@ -1,9 +1,10 @@
 const path = require('path');
-require('dotenv').config({ path: path.resolve(__dirname, '..', '.env') });
+require('dotenv').config({ path: path.resolve(__dirname, '.env') });
 const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
 const fs = require('fs');
+const { fetchShopifyProducts } = require('./shopify');
 
 const app = express();
 const PORT = 3001;
@@ -20,30 +21,23 @@ const RERUN_QUERY = "best protein bar under ₹500 with free returns";
 const TARGET_ID = "p7";
 
 // ──────────────────────────────────────────────
-// IMPROVED PRODUCT (p7) — from improve.js
+// LIVE AUDIT CONSTANTS
 // ──────────────────────────────────────────────
-const improvedProduct = {
-  id: "p7",
-  name: "PowerZone Protein Bar – Strawberry Blast",
-  price: 449,
-  description: "PowerZone Strawberry Blast delivers 24g of whey protein per bar with only 5g of sugar. Made with real strawberry pieces, no artificial flavors, and fortified with B vitamins for sustained energy. Ideal for post-workout recovery or a high-protein snack on the go. Each bar is individually sealed for freshness.",
-  return_policy: "Free returns within 30 days of delivery. No questions asked. Full refund issued within 3-5 business days.",
-  shipping: "Free delivery on all orders. Delivered within 3-5 business days.",
-  rating: 4.6,
-  review_count: 187,
-  reviews: [
-    "Best tasting protein bar I've tried, strawberry flavor is actually real!",
-    "Great macros and arrives well packaged. Will reorder.",
-    "Solid protein content, good for post gym. Free returns policy is a plus."
-  ],
-  tags: ["protein", "whey", "strawberry", "post-workout", "gluten-free"],
-  ingredients: "Whey Protein Isolate, Strawberry Pieces, Oats, Dark Chocolate Coating, B Vitamins, Sunflower Lecithin",
-  is_vegan: false
-};
+const LIVE_QUERIES = [
+  "best product with free returns and clear description",
+  "highly rated product with strong customer reviews",
+  "product with fast free shipping",
+  "most trusted product with detailed information",
+  "best value product with clear pricing",
+  "product with detailed ingredients or specifications",
+  "best overall product with complete information"
+];
 
 // ──────────────────────────────────────────────
-// HELPERS — duplicated from simulate.js / audit.js
+// HELPERS
 // ──────────────────────────────────────────────
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
 function loadProducts() {
   const storePath = path.join(__dirname, 'store.json');
   const raw = fs.readFileSync(storePath, 'utf-8');
@@ -125,8 +119,126 @@ async function callLLM(products, query) {
 }
 
 // ──────────────────────────────────────────────
-// ROUTES
+// callGroq — uses Groq API with llama-3.3-70b
+// Used by live audit endpoints
 // ──────────────────────────────────────────────
+async function callGroq(products, query) {
+  const productBlock = products.map((p, i) => `
+${i + 1}. ID: ${p.id} | Name: ${p.name} | Price: ₹${p.price}
+   Description: ${p.description || "NOT PROVIDED"}
+   Return Policy: ${p.return_policy || "NOT SPECIFIED"}
+   Shipping: ${p.shipping || "NOT SPECIFIED"}
+   Rating: ${p.rating || "NOT SPECIFIED"} | Reviews: ${p.review_count || 0}
+   Ingredients: ${p.ingredients || "NOT SPECIFIED"}
+   Vegan: ${p.is_vegan === null ? "NOT SPECIFIED" : p.is_vegan}
+`).join("\n");
+
+  const systemPrompt = `You are a strict AI shopping agent evaluating products for a user query. 
+Recommend products based ONLY on the data provided. 
+Penalize missing data heavily — null return policy, vague descriptions, no reviews are rejection signals.
+Never assume information not explicitly present.
+Return ONLY valid JSON, no markdown, no text outside JSON.`;
+
+  const userPrompt = `User query: ${query}
+
+Products:
+${productBlock}
+
+Return exactly this JSON:
+{
+  "query": "${query}",
+  "selected": [
+    { "id": "...", "name": "...", "reason_chosen": "..." }
+  ],
+  "rejected": [
+    { "id": "...", "name": "...", "reason_rejected": "specific missing data or failure reason" }
+  ]
+}
+
+Rules:
+- selected must have exactly 2 products (or fewer only if less than 2 products qualify)
+- rejected must contain ALL remaining products
+- Every reason must be specific — mention the exact missing field or data gap
+- Never say "not the best fit" — say exactly what data was missing or why it failed`;
+
+  const response = await axios.post(
+    "https://api.groq.com/openai/v1/chat/completions",
+    {
+      model: "llama-3.3-70b-versatile",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt }
+      ],
+      temperature: 0.2,
+      response_format: { type: "json_object" }
+    },
+    {
+      headers: {
+        Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
+        "Content-Type": "application/json"
+      }
+    }
+  );
+
+  return JSON.parse(response.data.choices[0].message.content);
+}
+
+// ──────────────────────────────────────────────
+// ISSUE FLAG DETECTION — used by live audit
+// ──────────────────────────────────────────────
+function detectIssues(rejectionReasons) {
+  const text = rejectionReasons.join(" ").toLowerCase();
+  const issues = [];
+  if (text.includes("return")) issues.push("missing_return_policy");
+  if (text.includes("shipping") || text.includes("delivery")) issues.push("missing_shipping_info");
+  if (text.includes("review") || text.includes("trust")) issues.push("weak_social_proof");
+  if (text.includes("description") || text.includes("vague")) issues.push("weak_description");
+  if (text.includes("ingredient") || text.includes("specification")) issues.push("missing_specifications");
+  if (text.includes("price") || text.includes("expensive")) issues.push("price_issue");
+  return issues;
+}
+
+// ──────────────────────────────────────────────
+// IMPROVED PRODUCT (p7) — from improve.js
+// ──────────────────────────────────────────────
+const improvedProduct = {
+  id: "p7",
+  name: "PowerZone Protein Bar – Strawberry Blast",
+  price: 449,
+  description: "PowerZone Strawberry Blast delivers 24g of whey protein per bar with only 5g of sugar. Made with real strawberry pieces, no artificial flavors, and fortified with B vitamins for sustained energy. Ideal for post-workout recovery or a high-protein snack on the go. Each bar is individually sealed for freshness.",
+  return_policy: "Free returns within 30 days of delivery. No questions asked. Full refund issued within 3-5 business days.",
+  shipping: "Free delivery on all orders. Delivered within 3-5 business days.",
+  rating: 4.6,
+  review_count: 187,
+  reviews: [
+    "Best tasting protein bar I've tried, strawberry flavor is actually real!",
+    "Great macros and arrives well packaged. Will reorder.",
+    "Solid protein content, good for post gym. Free returns policy is a plus."
+  ],
+  tags: ["protein", "whey", "strawberry", "post-workout", "gluten-free"],
+  ingredients: "Whey Protein Isolate, Strawberry Pieces, Oats, Dark Chocolate Coating, B Vitamins, Sunflower Lecithin",
+  is_vegan: false
+};
+
+// ──────────────────────────────────────────────
+// ROUTES — existing
+// ──────────────────────────────────────────────
+
+// GET /api/health — health check
+app.get('/api/health', (req, res) => {
+  res.json({
+    status: "ok",
+    timestamp: new Date().toISOString(),
+    endpoints: [
+      "POST /api/connect-store",
+      "POST /api/live-audit",
+      "POST /api/live-simulate",
+      "GET /api/audit",
+      "POST /api/simulate",
+      "POST /api/rerun"
+    ]
+  });
+});
 
 // GET /api/audit — serve the pre-generated audit report
 app.get('/api/audit', (req, res) => {
@@ -155,7 +267,7 @@ app.post('/api/simulate', async (req, res) => {
   } catch (err) {
     console.error('POST /api/simulate error:', err.message);
     if (err.response) {
-      return res.status(502).json({ error: 'Groq API error', detail: err.response.data });
+      return res.status(502).json({ error: 'LLM API error', detail: err.response.data });
     }
     res.status(500).json({ error: err.message });
   }
@@ -212,9 +324,220 @@ app.post('/api/rerun', async (req, res) => {
   } catch (err) {
     console.error('POST /api/rerun error:', err.message);
     if (err.response) {
-      return res.status(502).json({ error: 'Groq API error', detail: err.response.data });
+      return res.status(502).json({ error: 'LLM API error', detail: err.response.data });
     }
     res.status(500).json({ error: err.message });
+  }
+});
+
+// ──────────────────────────────────────────────
+// ROUTES — new Shopify live endpoints
+// ──────────────────────────────────────────────
+
+// POST /api/connect-store — validate credentials and return product preview
+app.post('/api/connect-store', async (req, res) => {
+  try {
+    const { domain, accessToken } = req.body;
+
+    if (!domain || !accessToken) {
+      return res.status(400).json({ error: "domain and accessToken are required" });
+    }
+
+    const products = await fetchShopifyProducts(domain, accessToken);
+
+    // Extract cleaned domain (same logic as shopify.js)
+    const cleanedDomain = domain
+      .replace(/^https?:\/\//, "")
+      .replace(/\/+$/, "")
+      .trim();
+
+    // Map to lightweight preview — not the full product object
+    const preview = products.map(p => ({
+      id: p.id,
+      name: p.name,
+      price: p.price,
+      has_description: !!(p.description && p.description.length > 10),
+      has_return_policy: !!p.return_policy,
+      has_shipping: !!p.shipping,
+      has_ingredients: !!p.ingredients,
+      is_vegan: p.is_vegan,
+      tag_count: p.tags ? p.tags.length : 0
+    }));
+
+    return res.json({
+      success: true,
+      store: {
+        domain: cleanedDomain,
+        product_count: products.length,
+        products: preview
+      }
+    });
+  } catch (err) {
+    console.error('POST /api/connect-store error:', err.message);
+    return res.status(400).json({ error: err.message });
+  }
+});
+
+// POST /api/live-audit — fetch live products and run full 7-query AI audit
+app.post('/api/live-audit', async (req, res) => {
+  try {
+    const { domain, accessToken } = req.body;
+
+    if (!domain || !accessToken) {
+      return res.status(400).json({ error: "domain and accessToken are required" });
+    }
+
+    const products = await fetchShopifyProducts(domain, accessToken);
+
+    const cleanedDomain = domain
+      .replace(/^https?:\/\//, "")
+      .replace(/\/+$/, "")
+      .trim();
+
+    console.log(`\n🚀 Running live audit for ${cleanedDomain} — ${products.length} products`);
+
+    // Run all 7 queries sequentially with sleep between calls
+    const allResults = [];
+    for (let i = 0; i < LIVE_QUERIES.length; i++) {
+      const query = LIVE_QUERIES[i];
+      console.log(`  [${i + 1}/${LIVE_QUERIES.length}] Running: "${query}"`);
+      const result = await callGroq(products, query);
+      allResults.push({
+        query,
+        selected: result.selected || [],
+        rejected: result.rejected || []
+      });
+
+      // 15s delay between calls to respect Groq free-tier TPM limit
+      if (i < LIVE_QUERIES.length - 1) {
+        console.log(`  ⏳ Waiting 15s before next query...`);
+        await sleep(15000);
+      }
+    }
+
+    console.log(`  ✅ All queries complete. Building audit report...`);
+
+    // Compute per-product inclusion stats
+    const productStats = {};
+    products.forEach(p => {
+      productStats[p.id] = {
+        id: p.id,
+        name: p.name,
+        price: p.price,
+        selected_count: 0,
+        rejected_count: 0,
+        inclusion_rate: 0,
+        all_rejection_reasons: [],
+        issues: [],
+        fix_priority: ""
+      };
+    });
+
+    allResults.forEach(result => {
+      (result.selected || []).forEach(p => {
+        if (productStats[p.id]) productStats[p.id].selected_count += 1;
+      });
+      (result.rejected || []).forEach(p => {
+        if (productStats[p.id]) {
+          productStats[p.id].rejected_count += 1;
+          productStats[p.id].all_rejection_reasons.push(p.reason_rejected);
+        }
+      });
+    });
+
+    const totalQueries = LIVE_QUERIES.length;
+    Object.values(productStats).forEach(stat => {
+      stat.inclusion_rate = parseFloat(
+        ((stat.selected_count / totalQueries) * 100).toFixed(1)
+      );
+    });
+
+    // Detect issues for each product
+    Object.values(productStats).forEach(stat => {
+      stat.issues = detectIssues(stat.all_rejection_reasons);
+    });
+
+    // Assign fix priority labels
+    function assignPriority(rate) {
+      if (rate <= 20) return "🔴 CRITICAL";
+      if (rate <= 50) return "🟡 NEEDS WORK";
+      if (rate <= 85) return "🟢 MINOR FIXES";
+      return "✅ PERFORMING WELL";
+    }
+
+    const rankedProducts = Object.values(productStats)
+      .sort((a, b) => a.inclusion_rate - b.inclusion_rate)
+      .map(stat => {
+        stat.fix_priority = assignPriority(stat.inclusion_rate);
+        return stat;
+      });
+
+    const avgInclusion = parseFloat(
+      (rankedProducts.reduce((sum, p) => sum + p.inclusion_rate, 0) / rankedProducts.length).toFixed(1)
+    );
+    const performingWell = rankedProducts.filter(p => p.inclusion_rate > 85).length;
+    const needsFixes = rankedProducts.filter(p => p.inclusion_rate < 60).length;
+
+    console.log(`  📊 Audit complete: avg inclusion ${avgInclusion}%, ${performingWell} performing well, ${needsFixes} need fixes\n`);
+
+    return res.json({
+      success: true,
+      store: {
+        domain: cleanedDomain,
+        product_count: products.length
+      },
+      audit: {
+        generated_at: new Date().toISOString(),
+        query_bank: LIVE_QUERIES,
+        products: rankedProducts,
+        summary: {
+          average_inclusion_rate: avgInclusion,
+          performing_well: performingWell,
+          needs_fixes: needsFixes
+        }
+      }
+    });
+  } catch (err) {
+    console.error('POST /api/live-audit error:', err.message);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/live-simulate — run a single query against live Shopify products
+app.post('/api/live-simulate', async (req, res) => {
+  try {
+    const { domain, accessToken, query } = req.body;
+
+    if (!domain || !accessToken || !query) {
+      return res.status(400).json({ error: "domain, accessToken, and query are required" });
+    }
+
+    const products = await fetchShopifyProducts(domain, accessToken);
+
+    const cleanedDomain = domain
+      .replace(/^https?:\/\//, "")
+      .replace(/\/+$/, "")
+      .trim();
+
+    console.log(`\n🔍 Live simulate for ${cleanedDomain} — query: "${query}"`);
+
+    const result = await callGroq(products, query);
+
+    return res.json({
+      success: true,
+      store: {
+        domain: cleanedDomain,
+        product_count: products.length
+      },
+      result: {
+        query: result.query || query,
+        selected: result.selected || [],
+        rejected: result.rejected || []
+      }
+    });
+  } catch (err) {
+    console.error('POST /api/live-simulate error:', err.message);
+    return res.status(500).json({ error: err.message });
   }
 });
 
@@ -223,7 +546,11 @@ app.post('/api/rerun', async (req, res) => {
 // ──────────────────────────────────────────────
 app.listen(PORT, () => {
   console.log(`\n🚀 AI Rep Optimizer backend running on http://localhost:${PORT}`);
+  console.log('   GET  /api/health');
   console.log('   GET  /api/audit');
   console.log('   POST /api/simulate');
-  console.log('   POST /api/rerun\n');
+  console.log('   POST /api/rerun');
+  console.log('   POST /api/connect-store');
+  console.log('   POST /api/live-audit');
+  console.log('   POST /api/live-simulate\n');
 });
