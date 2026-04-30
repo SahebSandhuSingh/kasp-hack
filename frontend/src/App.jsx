@@ -1,58 +1,51 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import Shell from './components/Shell.jsx'
 import ConnectStore from './components/ConnectStore.jsx'
 import Dashboard from './components/Dashboard.jsx'
-import Simulate from './components/Simulate.jsx'
+import ProductTable from './components/ProductTable.jsx'
 import BeforeAfter from './components/BeforeAfter.jsx'
+import Simulate from './components/Simulate.jsx'
 
 export default function App() {
   const [view, setView] = useState('dashboard')
-  const [storeData, setStoreData] = useState(null)   // { domain, accessToken, productCount }
-  const [auditData, setAuditData] = useState(null)   // full audit result object
+  const [storeData, setStoreData] = useState(null) // null = not connected
+  const [selectedProduct, setSelectedProduct] = useState(null)
 
-  // Load mock audit data on mount so dashboard works immediately
-  useEffect(() => {
-    fetch('/api/audit')
-      .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json() })
-      .then(d => setAuditData(d))
-      .catch(err => console.error('Failed to load mock audit:', err.message))
-  }, [])
+  // Called when ConnectStore succeeds
+  const handleConnected = (data) => {
+    setStoreData(data)
+    setView('dashboard')
+  }
+
+  // Called when user clicks "Disconnect store"
+  const handleDisconnect = () => {
+    setStoreData(null)
+    setSelectedProduct(null)
+    setView('dashboard')
+  }
+
+  // If no store connected, show the onboarding screen (no Shell)
+  if (!storeData) {
+    return <ConnectStore onConnected={handleConnected} />
+  }
 
   const renderView = () => {
     switch (view) {
-      case 'connect':
-        return (
-          <ConnectStore
-            storeData={storeData}
-            setStoreData={setStoreData}
-            setAuditData={setAuditData}
-            setView={setView}
-          />
-        )
       case 'dashboard':
-        return (
-          <Dashboard
-            auditData={auditData}
-            storeData={storeData}
-            setAuditData={setAuditData}
-            storeCredentials={storeData}
-          />
-        )
-      case 'simulate':
-        return (
-          <Simulate storeData={storeData} />
-        )
+        return <Dashboard setView={setView} setSelectedProduct={setSelectedProduct} />
+      case 'products':
+        return <ProductTable setView={setView} setSelectedProduct={setSelectedProduct} />
       case 'beforeafter':
-        return (
-          <BeforeAfter />
-        )
+        return <BeforeAfter selectedProduct={selectedProduct} />
+      case 'simulate':
+        return <Simulate />
       default:
-        return null
+        return <Dashboard setView={setView} setSelectedProduct={setSelectedProduct} />
     }
   }
 
   return (
-    <Shell view={view} setView={setView} storeData={storeData}>
+    <Shell view={view} setView={setView} storeData={storeData} onDisconnect={handleDisconnect}>
       {renderView()}
     </Shell>
   )

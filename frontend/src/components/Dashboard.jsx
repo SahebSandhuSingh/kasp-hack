@@ -1,351 +1,227 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
+import { STORE, OVERVIEW, ISSUES_SUMMARY, PRODUCTS } from '../mockData'
 
-function getRateColor(rate) {
-  if (rate < 20) return 'var(--red)'
-  if (rate < 60) return 'var(--amber)'
-  return 'var(--green)'
-}
+// SVG ring chart
+function ScoreRing({ score }) {
+  const safeScore = isNaN(score) ? 0 : score
+  const r = 45
+  const circ = 2 * Math.PI * r   // ≈ 282.7
+  const offset = circ - (safeScore / 100) * circ
 
-function getRateBarColor(rate) {
-  if (rate < 20) return 'var(--red)'
-  if (rate < 60) return 'var(--amber)'
-  return 'var(--green)'
-}
+  const color =
+    safeScore >= 70 ? '#008060' :
+    safeScore >= 40 ? '#FFC453' : '#D72C0D'
 
-function PriorityBadge({ priority }) {
-  if (!priority) return null
-  if (priority.includes('CRITICAL')) return <span className="badge-critical">Critical</span>
-  if (priority.includes('NEEDS WORK')) return <span className="badge-warning">Needs Work</span>
-  if (priority.includes('MINOR')) return <span className="badge-neutral">Minor Fixes</span>
-  return <span className="badge-success">Good</span>
-}
+  const label =
+    safeScore >= 70 ? 'Good' :
+    safeScore >= 40 ? 'Fair' : 'Poor'
 
-function InclusionBar({ rate, animate }) {
-  const [width, setWidth] = useState(0)
+  const [animated, setAnimated] = useState(circ)
   useEffect(() => {
-    if (animate) {
-      const t = setTimeout(() => setWidth(rate), 100)
-      return () => clearTimeout(t)
-    } else {
-      setWidth(rate)
-    }
-  }, [rate, animate])
+    const t = setTimeout(() => setAnimated(offset), 60)
+    return () => clearTimeout(t)
+  }, [offset])
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-      <div style={{
-        width: '140px', height: '6px',
-        background: 'var(--border)',
-        borderRadius: '3px',
-        overflow: 'hidden',
-        flexShrink: 0,
-      }}>
-        <div style={{
-          width: `${Math.max(width, 1)}%`,
-          height: '100%',
-          background: getRateBarColor(rate),
-          borderRadius: '3px',
-          transition: 'width 0.6s ease',
-        }} />
-      </div>
-      <span style={{
-        fontFamily: 'DM Mono, monospace',
-        fontSize: '13px',
-        fontWeight: 500,
-        color: getRateColor(rate),
-        minWidth: '36px',
-      }}>
-        {rate}%
+    <div className="flex flex-col items-center gap-2">
+      <svg width="120" height="120" viewBox="0 0 120 120">
+        {/* Track */}
+        <circle
+          cx="60" cy="60" r={r}
+          fill="none"
+          stroke="#E1E3E5"
+          strokeWidth="10"
+        />
+        {/* Fill */}
+        <circle
+          cx="60" cy="60" r={r}
+          fill="none"
+          stroke={color}
+          strokeWidth="10"
+          strokeLinecap="round"
+          strokeDasharray={circ}
+          strokeDashoffset={animated}
+          transform="rotate(-90 60 60)"
+          style={{ transition: 'stroke-dashoffset 1.2s cubic-bezier(0.4,0,0.2,1)' }}
+        />
+        {/* Score text */}
+        <text x="60" y="57" textAnchor="middle" fontSize="22" fontWeight="700" fill="#202223">{safeScore}</text>
+        <text x="60" y="73" textAnchor="middle" fontSize="11" fill="#6D7175">/100</text>
+      </svg>
+      <span className="text-sm font-semibold px-3 py-0.5 rounded-full"
+        style={{ background: color + '1A', color }}>
+        {label}
       </span>
     </div>
   )
 }
 
-function SkeletonCard() {
+function StatCard({ label, value, sub, accent }) {
   return (
-    <div className="card-padded" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-      <div className="skeleton" style={{ width: '60%', height: '16px' }} />
-      <div className="skeleton" style={{ width: '40%', height: '12px' }} />
-      <div className="skeleton" style={{ width: '80%', height: '8px' }} />
+    <div className="bg-white rounded-card shadow-card p-5 flex flex-col gap-1 fade-up">
+      <span className="text-xs font-medium text-shopify-secondary uppercase tracking-wide">{label}</span>
+      <span className={`text-3xl font-bold ${accent || 'text-shopify-text'}`}>{value}</span>
+      {sub && <span className="text-xs text-shopify-secondary">{sub}</span>}
     </div>
   )
 }
 
-export default function Dashboard({ auditData, storeData, setAuditData, storeCredentials }) {
-  const [animate, setAnimate] = useState(false)
-  const [rerunLoading, setRerunLoading] = useState(false)
+const SEVERITY_CONFIG = {
+  critical: { bg: 'bg-shopify-critical-light', text: 'text-shopify-critical', dot: 'bg-shopify-critical', label: 'Critical' },
+  warning:  { bg: 'bg-shopify-warning-light',  text: 'text-shopify-warning-text', dot: 'bg-shopify-warning', label: 'Warning' },
+  good:     { bg: 'bg-shopify-success-light',  text: 'text-shopify-green', dot: 'bg-shopify-green', label: 'Good' },
+}
 
-  useEffect(() => {
-    const t = setTimeout(() => setAnimate(true), 100)
-    return () => clearTimeout(t)
-  }, [auditData])
+function IssueBadge({ severity }) {
+  const cfg = SEVERITY_CONFIG[severity]
+  return (
+    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${cfg.bg} ${cfg.text}`}>
+      {cfg.label}
+    </span>
+  )
+}
 
-  const handleRerun = useCallback(async () => {
-    if (!storeCredentials?.domain || !storeCredentials?.accessToken) return
-    setRerunLoading(true)
-    try {
-      const res = await fetch('/api/live-audit', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ domain: storeCredentials.domain, accessToken: storeCredentials.accessToken }),
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
-      setAuditData(data.audit)
-    } catch (err) {
-      console.error('Re-run failed:', err.message)
-    } finally {
-      setRerunLoading(false)
-    }
-  }, [storeCredentials, setAuditData])
-
-  if (!auditData) {
-    return (
-      <div style={{ animation: 'fadeIn 0.3s ease' }}>
-        <div style={{ marginBottom: '24px' }}>
-          <div className="skeleton" style={{ width: '200px', height: '22px', marginBottom: '8px' }} />
-          <div className="skeleton" style={{ width: '280px', height: '14px' }} />
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '28px' }}>
-          {[1,2,3,4].map(i => <SkeletonCard key={i} />)}
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          {[1,2,3,4].map(i => <SkeletonCard key={i} />)}
-        </div>
-      </div>
-    )
-  }
-
-  const products = auditData.products || []
-  const queryCount = auditData.query_bank?.length || 7
-  const avg = products.length
-    ? (products.reduce((s, p) => s + p.inclusion_rate, 0) / products.length).toFixed(1)
-    : 0
-  const aiReady = products.filter(p => p.inclusion_rate > 85).length
-  const needsFixes = products.filter(p => p.inclusion_rate < 60).length
-  const topPerformers = products.filter(p => p.inclusion_rate > 85)
-
-  const isLive = !!storeData?.domain
-  const storeName = isLive ? storeData.domain : 'Demo Store — Mock Data'
+export default function Dashboard({ setView }) {
+  const critical = PRODUCTS.filter(p => p.status === 'critical')
+  const optimized = PRODUCTS.filter(p => p.status === 'optimized')
 
   return (
-    <div style={{ animation: 'fadeIn 0.3s ease' }}>
+    <div className="space-y-6">
 
-      {/* Header row */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px' }}>
+      {/* Page header */}
+      <div className="flex items-center justify-between">
         <div>
-          <h1 className="page-title">Store AI Audit Report</h1>
-          <p className="page-subtitle" style={{ fontFamily: 'DM Mono, monospace', fontSize: '12px' }}>
-            {storeName}
+          <h1 className="text-xl font-semibold text-shopify-text">Store Overview</h1>
+          <p className="text-sm text-shopify-secondary mt-0.5">
+            Connected to <span className="font-medium text-shopify-text">{STORE.name}</span>
+            <span className="ml-2 inline-flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-shopify-green" />
+              <span className="text-shopify-green font-medium">Live</span>
+            </span>
           </p>
         </div>
-        {isLive && (
-          <button
-            className="btn-secondary"
-            style={{ fontSize: '13px', padding: '7px 14px' }}
-            onClick={handleRerun}
-            disabled={rerunLoading}
-          >
-            {rerunLoading ? (
-              <>
-                <span style={{
-                  width: '12px', height: '12px',
-                  border: '2px solid var(--border)',
-                  borderTopColor: 'var(--text-secondary)',
-                  borderRadius: '50%',
-                  animation: 'spin 0.7s linear infinite',
-                }} />
-                Running…
-              </>
-            ) : '↻ Re-run Audit'}
-          </button>
-        )}
+        <button
+          onClick={() => setView('products')}
+          className="bg-shopify-green hover:bg-shopify-green-dark text-white text-sm font-medium px-4 py-2 rounded-btn transition-colors"
+        >
+          Start Optimizing →
+        </button>
       </div>
 
-      {/* Stat cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '28px' }}>
-        {[
-          {
-            label: 'Avg AI Inclusion Rate',
-            value: `${avg}%`,
-            color: getRateColor(parseFloat(avg)),
-            sub: `across ${queryCount} buyer queries`,
-          },
-          {
-            label: 'Products Audited',
-            value: products.length,
-            color: 'var(--text-primary)',
-            sub: 'in your catalog',
-          },
-          {
-            label: 'Performing Well',
-            value: aiReady,
-            color: 'var(--green)',
-            sub: '>85% inclusion rate',
-          },
-          {
-            label: 'Need Attention',
-            value: needsFixes,
-            color: 'var(--red)',
-            sub: '<60% inclusion rate',
-          },
-        ].map(stat => (
-          <div key={stat.label} className="card-padded">
-            <p className="section-title" style={{ marginBottom: '8px' }}>{stat.label}</p>
-            <p style={{
-              fontFamily: 'DM Mono, monospace',
-              fontSize: '32px',
-              fontWeight: 700,
-              color: stat.color,
-              lineHeight: 1,
-              marginBottom: '6px',
-            }}>
-              {stat.value}
+      {/* Hero + stat cards row */}
+      <div className="grid grid-cols-12 gap-4">
+
+        {/* Score card */}
+        <div className="col-span-12 md:col-span-4 bg-white rounded-card shadow-card p-6 fade-up flex flex-col items-center justify-center gap-4">
+          <div className="text-center">
+            <p className="text-xs font-semibold uppercase tracking-widest text-shopify-secondary mb-3">
+              AI Visibility Score
             </p>
-            <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{stat.sub}</p>
+            <ScoreRing score={OVERVIEW.aiVisibilityScore} />
           </div>
-        ))}
-      </div>
-
-      {/* Priority action plan */}
-      <div style={{ marginBottom: '28px' }}>
-        <div style={{ marginBottom: '14px' }}>
-          <p className="section-title" style={{ marginBottom: '2px' }}>Priority Action Plan</p>
-          <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-            Ranked by AI visibility score — fix these first
+          <p className="text-xs text-shopify-secondary text-center max-w-[180px]">
+            How well your products appear in AI-powered shopping recommendations
           </p>
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-          {/* Column header */}
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: '40px 1fr 180px 120px 1fr 90px',
-            gap: '12px',
-            padding: '8px 16px',
-            alignItems: 'center',
-          }}>
-            {['#', 'Product', 'AI Visibility', 'Priority', 'Issues', ''].map((h, i) => (
-              <span key={i} style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
-                {h}
-              </span>
-            ))}
-          </div>
-
-          {products.map((product, i) => {
-            const issues = product.issues || []
-            return (
-              <div
-                key={product.id}
-                className="card"
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: '40px 1fr 180px 120px 1fr 90px',
-                  gap: '12px',
-                  padding: '14px 16px',
-                  alignItems: 'center',
-                  background: i % 2 === 1 ? 'var(--bg-page)' : 'var(--bg-surface)',
-                  animation: `fadeInUp 0.3s ease both`,
-                  animationDelay: `${i * 0.04}s`,
-                }}
-              >
-                {/* Rank */}
-                <span style={{ fontFamily: 'DM Mono, monospace', fontSize: '13px', color: 'var(--text-muted)' }}>
-                  #{i + 1}
-                </span>
-
-                {/* Product info */}
-                <div>
-                  <p style={{ fontWeight: 600, fontSize: '14px', color: 'var(--text-primary)', marginBottom: '2px' }}>
-                    {product.name}
-                  </p>
-                  <p style={{ fontFamily: 'DM Mono, monospace', fontSize: '12px', color: 'var(--text-muted)' }}>
-                    ₹{product.price}
-                  </p>
-                </div>
-
-                {/* Inclusion bar */}
-                <InclusionBar rate={product.inclusion_rate} animate={animate} />
-
-                {/* Priority badge */}
-                <div><PriorityBadge priority={product.fix_priority} /></div>
-
-                {/* Issues */}
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-                  {issues.slice(0, 3).map(issue => (
-                    <span key={issue} style={{
-                      background: 'var(--bg-surface-2)',
-                      color: 'var(--text-secondary)',
-                      border: '1px solid var(--border)',
-                      borderRadius: '4px',
-                      padding: '2px 7px',
-                      fontSize: '11px',
-                      fontFamily: 'DM Mono, monospace',
-                    }}>
-                      {issue.replace(/_/g, ' ')}
-                    </span>
-                  ))}
-                  {issues.length === 0 && (
-                    <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>—</span>
-                  )}
-                </div>
-
-                {/* Details button — placeholder for future deep-dive */}
-                <div style={{ textAlign: 'right' }}>
-                  <span style={{
-                    fontSize: '12px',
-                    color: 'var(--text-muted)',
-                    fontFamily: 'DM Mono, monospace',
-                    fontWeight: 500,
-                  }}>
-                    {product.selected_count}/{product.selected_count + product.rejected_count}
-                  </span>
-                </div>
-              </div>
-            )
-          })}
+        {/* Stat cards */}
+        <div className="col-span-12 md:col-span-8 grid grid-cols-2 gap-4">
+          <StatCard
+            label="Total Products"
+            value={STORE.totalProducts}
+            sub={`${optimized.length} fully optimized`}
+          />
+          <StatCard
+            label="Products Optimized"
+            value={optimized.length}
+            sub={`${STORE.totalProducts - optimized.length} still need work`}
+            accent="text-shopify-green"
+          />
+          <StatCard
+            label="Issues Found"
+            value={OVERVIEW.issuesFound}
+            sub="Across all products"
+            accent="text-shopify-critical"
+          />
+          <StatCard
+            label="Est. Revenue Impact"
+            value={OVERVIEW.estRevenueImpact}
+            sub="If all issues are fixed"
+            accent="text-shopify-green"
+          />
         </div>
       </div>
 
-      {/* Top performers */}
-      {topPerformers.length > 0 && (
-        <div className="card-padded" style={{ borderLeft: '3px solid var(--green)', borderRadius: '0 var(--radius-md) var(--radius-md) 0', marginBottom: '20px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
-            <p style={{ fontWeight: 600, fontSize: '14px', color: 'var(--text-primary)' }}>Performing Well</p>
-            <span className="badge-success">✓ {topPerformers.length} products</span>
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            {topPerformers.map(p => (
-              <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <span style={{ fontSize: '13px', fontWeight: 500, flex: 1, color: 'var(--text-primary)' }}>{p.name}</span>
-                <InclusionBar rate={p.inclusion_rate} animate={animate} />
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      {/* Issues + critical products row */}
+      <div className="grid grid-cols-12 gap-4">
 
-      {/* Query bank used */}
-      {auditData.query_bank && (
-        <div className="card-padded" style={{ background: 'var(--bg-surface-2)', border: '1px solid var(--border)' }}>
-          <p className="section-title">Queries Used in This Audit</p>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-            {auditData.query_bank.map((q, i) => (
-              <span key={i} style={{
-                background: 'var(--bg-surface)',
-                border: '1px solid var(--border)',
-                borderRadius: '20px',
-                padding: '4px 12px',
-                fontSize: '12px',
-                color: 'var(--text-secondary)',
-                fontFamily: 'DM Mono, monospace',
-              }}>
-                {q}
-              </span>
-            ))}
+        {/* Issues breakdown */}
+        <div className="col-span-12 md:col-span-6 bg-white rounded-card shadow-card fade-up">
+          <div className="px-5 py-4 border-b border-shopify-border">
+            <h2 className="text-sm font-semibold text-shopify-text">Issues Breakdown</h2>
+          </div>
+          <div className="divide-y divide-shopify-border">
+            {ISSUES_SUMMARY.map((issue, i) => {
+              const cfg = SEVERITY_CONFIG[issue.severity]
+              return (
+                <div key={i} className="px-5 py-3 flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <span className={`w-2 h-2 rounded-full ${cfg.dot}`} />
+                    <span className="text-sm text-shopify-text">{issue.label}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold text-shopify-text">{issue.count}</span>
+                    <IssueBadge severity={issue.severity} />
+                  </div>
+                </div>
+              )
+            })}
           </div>
         </div>
-      )}
+
+        {/* Critical products */}
+        <div className="col-span-12 md:col-span-6 bg-white rounded-card shadow-card fade-up">
+          <div className="px-5 py-4 border-b border-shopify-border flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-shopify-text">
+              Critical Products
+            </h2>
+            <button
+              onClick={() => setView('products')}
+              className="text-xs text-shopify-green font-medium hover:underline"
+            >
+              View all →
+            </button>
+          </div>
+          {critical.length === 0 ? (
+            <div className="px-5 py-10 flex flex-col items-center text-center gap-2">
+              <span className="text-2xl">🎉</span>
+              <p className="text-sm font-medium text-shopify-text">No critical products!</p>
+              <p className="text-xs text-shopify-secondary">All your products are in good shape.</p>
+            </div>
+          ) : (
+            <div className="divide-y divide-shopify-border">
+              {critical.map(p => (
+                <div key={p.id} className="px-5 py-3.5 flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-shopify-text">{p.name}</p>
+                    <p className="text-xs text-shopify-secondary mt-0.5">
+                      Score: <span className="font-semibold text-shopify-critical">{p.score}</span>
+                      &nbsp;·&nbsp; {p.issues} issue{p.issues !== 1 ? 's' : ''}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setView('beforeafter')}
+                    className="text-xs font-medium text-shopify-green border border-shopify-green rounded-btn px-2.5 py-1 hover:bg-shopify-green-light transition-colors"
+                  >
+                    Fix now
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
     </div>
   )
 }

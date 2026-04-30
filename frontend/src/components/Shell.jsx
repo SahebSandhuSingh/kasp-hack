@@ -1,196 +1,110 @@
-// ── Inline SVG icons ──
-function IconOverview() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0 }}>
-      <rect x="1" y="1" width="6" height="6" rx="1.5" stroke="currentColor" strokeWidth="1.5"/>
-      <rect x="9" y="1" width="6" height="6" rx="1.5" stroke="currentColor" strokeWidth="1.5"/>
-      <rect x="1" y="9" width="6" height="6" rx="1.5" stroke="currentColor" strokeWidth="1.5"/>
-      <rect x="9" y="9" width="6" height="6" rx="1.5" stroke="currentColor" strokeWidth="1.5"/>
-    </svg>
-  )
-}
-
-function IconSimulate() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0 }}>
-      <circle cx="6.5" cy="6.5" r="4.5" stroke="currentColor" strokeWidth="1.5"/>
-      <path d="M10.5 10.5L14 14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-    </svg>
-  )
-}
-
-function IconCompare() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0 }}>
-      <path d="M5 2v12M11 2v12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-      <path d="M2 5l3-3 3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-      <path d="M8 11l3 3 3-3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-    </svg>
-  )
-}
-
-function IconConnect() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0 }}>
-      <path d="M6 4H4a2 2 0 0 0-2 2v4a2 2 0 0 0 2 2h2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-      <path d="M10 4h2a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-      <path d="M5 8h6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-    </svg>
-  )
-}
+import { useState, useRef, useEffect } from 'react'
 
 const NAV_ITEMS = [
-  { id: 'dashboard',   label: 'Overview',       Icon: IconOverview },
-  { id: 'simulate',    label: 'Simulate Query',  Icon: IconSimulate },
-  { id: 'beforeafter', label: 'Before & After',  Icon: IconCompare },
-  { id: 'connect',     label: 'Connect Store',   Icon: IconConnect },
+  { id: 'dashboard',   label: 'Overview',  icon: '◎' },
+  { id: 'products',    label: 'Products',  icon: '☰' },
+  { id: 'beforeafter', label: 'Optimize',  icon: '⚡' },
+  { id: 'simulate',    label: 'Simulate',  icon: '🔍' },
 ]
 
-export default function Shell({ view, setView, storeData, children }) {
-  const domain = storeData?.domain || null
+export default function Shell({ view, setView, storeData, onDisconnect, children }) {
+  const [dropdownOpen, setDropdownOpen] = useState(false)
+  const dropdownRef = useRef(null)
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    function handleClick(e) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        setDropdownOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [])
+
+  const storeName = storeData?.domain || 'Not connected'
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
+    <div className="min-h-screen bg-shopify-bg font-sans">
 
-      {/* ── Top Navbar ── */}
-      <header style={{
-        height: '56px',
-        background: 'var(--bg-surface)',
-        borderBottom: '1px solid var(--border)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: '0 20px',
-        flexShrink: 0,
-        zIndex: 10,
-      }}>
-        {/* Left: logo + brand */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <div style={{
-            width: '28px',
-            height: '28px',
-            background: 'var(--green)',
-            borderRadius: '6px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: 'white',
-            fontWeight: 700,
-            fontSize: '14px',
-            fontFamily: 'DM Sans, sans-serif',
-            flexShrink: 0,
-          }}>A</div>
-          <span style={{ fontWeight: 600, fontSize: '15px', color: 'var(--text-primary)', letterSpacing: '-0.01em' }}>
-            AI Rep Optimizer
-          </span>
-        </div>
+      {/* Top nav bar */}
+      <header className="bg-white shadow-nav sticky top-0 z-30">
+        <div className="max-w-7xl mx-auto px-6 flex items-center justify-between h-14">
 
-        {/* Right: connection status badge */}
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '6px',
-          padding: '5px 12px',
-          borderRadius: '20px',
-          fontSize: '12px',
-          fontWeight: 500,
-          background: domain ? 'var(--green-light)' : 'var(--bg-surface-2)',
-          color: domain ? 'var(--green)' : 'var(--text-muted)',
-          border: `1px solid ${domain ? 'var(--green-border)' : 'var(--border)'}`,
-          fontFamily: 'DM Mono, monospace',
-        }}>
-          <span style={{
-            width: '6px', height: '6px', borderRadius: '50%',
-            background: domain ? 'var(--green)' : 'var(--text-muted)',
-            flexShrink: 0,
-          }} />
-          {domain ? `Connected: ${domain}` : 'Demo Mode'}
+          {/* Brand */}
+          <div className="flex items-center gap-3">
+            <div className="w-7 h-7 rounded-md bg-shopify-green flex items-center justify-center">
+              <span className="text-white text-xs font-bold">AI</span>
+            </div>
+            <span className="font-semibold text-shopify-text text-sm tracking-tight">
+              AI Rep Optimizer
+            </span>
+          </div>
+
+          {/* Nav links */}
+          <nav className="flex items-center gap-1">
+            {NAV_ITEMS.map(item => (
+              <button
+                key={item.id}
+                onClick={() => setView(item.id)}
+                className={`
+                  flex items-center gap-1.5 px-3 py-1.5 rounded-btn text-sm font-medium transition-all
+                  ${view === item.id
+                    ? 'bg-shopify-green-light text-shopify-green'
+                    : 'text-shopify-secondary hover:bg-shopify-bg hover:text-shopify-text'
+                  }
+                `}
+              >
+                <span className="text-xs">{item.icon}</span>
+                {item.label}
+              </button>
+            ))}
+          </nav>
+
+          {/* Store pill with dropdown */}
+          <div className="relative" ref={dropdownRef}>
+            <button
+              onClick={() => setDropdownOpen(!dropdownOpen)}
+              className="flex items-center gap-2 bg-shopify-bg border border-shopify-border rounded-full px-3 py-1 hover:border-shopify-green/40 transition-colors"
+            >
+              <span className="w-2 h-2 rounded-full bg-shopify-green animate-pulse" />
+              <span className="text-xs text-shopify-secondary font-medium max-w-[180px] truncate">
+                {storeName}
+              </span>
+              <span className={`text-[10px] text-shopify-secondary transition-transform ${dropdownOpen ? 'rotate-180' : ''}`}>▼</span>
+            </button>
+
+            {/* Dropdown */}
+            {dropdownOpen && (
+              <div className="absolute right-0 top-full mt-1.5 w-56 bg-white rounded-card shadow-card border border-shopify-border overflow-hidden z-40 fade-up">
+                <div className="px-4 py-3 border-b border-shopify-border">
+                  <p className="text-xs font-semibold text-shopify-text truncate">{storeName}</p>
+                  {storeData?.productCount != null && (
+                    <p className="text-xs text-shopify-secondary mt-0.5">
+                      {storeData.productCount} products synced
+                    </p>
+                  )}
+                </div>
+                <button
+                  onClick={() => {
+                    setDropdownOpen(false)
+                    onDisconnect()
+                  }}
+                  className="w-full text-left px-4 py-2.5 text-sm text-shopify-critical hover:bg-shopify-critical-light transition-colors flex items-center gap-2"
+                >
+                  <span className="text-xs">⏻</span>
+                  Disconnect store
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </header>
 
-      {/* ── Body: sidebar + main ── */}
-      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-
-        {/* ── Sidebar ── */}
-        <nav style={{
-          width: '220px',
-          background: 'var(--bg-surface)',
-          borderRight: '1px solid var(--border)',
-          padding: '12px 0',
-          flexShrink: 0,
-          overflowY: 'auto',
-        }}>
-          <div style={{ padding: '4px 8px 8px', marginBottom: '4px' }}>
-            <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.6px', padding: '0 8px' }}>
-              Navigation
-            </span>
-          </div>
-          {NAV_ITEMS.map(({ id, label, Icon }) => {
-            const isActive = view === id
-            return (
-              <button
-                key={id}
-                onClick={() => setView(id)}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '10px',
-                  width: 'calc(100% - 16px)',
-                  margin: '1px 8px',
-                  padding: '9px 12px',
-                  background: isActive ? 'var(--green-light)' : 'transparent',
-                  color: isActive ? 'var(--green)' : 'var(--text-secondary)',
-                  fontWeight: isActive ? 600 : 500,
-                  fontSize: '14px',
-                  border: 'none',
-                  borderRadius: '6px',
-                  cursor: 'pointer',
-                  textAlign: 'left',
-                  fontFamily: 'DM Sans, sans-serif',
-                  transition: 'background 0.1s, color 0.1s',
-                }}
-                onMouseEnter={e => {
-                  if (!isActive) {
-                    e.currentTarget.style.background = 'var(--bg-surface-2)'
-                    e.currentTarget.style.color = 'var(--text-primary)'
-                  }
-                }}
-                onMouseLeave={e => {
-                  if (!isActive) {
-                    e.currentTarget.style.background = 'transparent'
-                    e.currentTarget.style.color = 'var(--text-secondary)'
-                  }
-                }}
-              >
-                <Icon />
-                {label}
-              </button>
-            )
-          })}
-
-          {/* Sidebar divider + info */}
-          <div style={{ margin: '12px 8px 0', padding: '12px', background: 'var(--bg-page)', borderRadius: '6px', border: '1px solid var(--border)' }}>
-            <p style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>
-              {domain ? 'Live Store' : 'Mock Data'}
-            </p>
-            <p style={{ fontSize: '11px', color: 'var(--text-muted)', lineHeight: 1.4 }}>
-              {domain
-                ? `Analyzing ${storeData?.productCount || '?'} products from ${domain}`
-                : 'Connect your store to audit live products'}
-            </p>
-          </div>
-        </nav>
-
-        {/* ── Main content ── */}
-        <main style={{
-          flex: 1,
-          background: 'var(--bg-page)',
-          overflowY: 'auto',
-          padding: '28px 32px',
-        }}>
-          {children}
-        </main>
-      </div>
+      {/* Page content */}
+      <main className="max-w-7xl mx-auto px-6 py-8">
+        {children}
+      </main>
     </div>
   )
 }

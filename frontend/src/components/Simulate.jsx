@@ -1,309 +1,258 @@
-import { useState, useCallback } from 'react'
+import { useState } from 'react'
+import { PRODUCTS, SIMULATE_QUERIES } from '../mockData'
 
-const KEYWORDS = ['return policy', 'shipping', 'reviews', 'description', 'ingredients', 'delivery', 'vague']
+// Deterministic scoring — assigns match score based on product data quality
+function scoreProductForQuery(product, query) {
+  const q = query.toLowerCase()
+  let score = 0
+  const reasons = []
+  const weaknesses = []
 
-function highlightKeywords(text) {
-  if (!text) return null
-  const parts = []
-  let remaining = text
-  let key = 0
-  while (remaining.length > 0) {
-    let earliest = null
-    for (const kw of KEYWORDS) {
-      const idx = remaining.toLowerCase().indexOf(kw)
-      if (idx !== -1 && (earliest === null || idx < earliest.idx)) {
-        earliest = { idx, kw }
-      }
-    }
-    if (!earliest) {
-      parts.push(<span key={key++}>{remaining}</span>)
-      break
-    }
-    const { idx, kw } = earliest
-    if (idx > 0) parts.push(<span key={key++}>{remaining.slice(0, idx)}</span>)
-    parts.push(
-      <mark key={key++} style={{
-        background: 'var(--red-light)',
-        color: 'var(--red)',
-        borderRadius: '2px',
-        padding: '0 3px',
-        fontStyle: 'normal',
-      }}>
-        {remaining.slice(idx, idx + kw.length)}
-      </mark>
-    )
-    remaining = remaining.slice(idx + kw.length)
+  // Description quality
+  const wordCount = (product.description || '').split(/\s+/).filter(Boolean).length
+  if (wordCount >= 30) { score += 25; reasons.push('Detailed description') }
+  else if (wordCount >= 10) { score += 10; reasons.push('Brief description') }
+  else { weaknesses.push('Missing or vague description') }
+
+  // Return policy
+  if (product.returnPolicy) { score += 20; reasons.push('Clear return policy') }
+  else if (q.includes('return')) { weaknesses.push('No return policy — query specifically asks for this') }
+  else { weaknesses.push('No return policy') }
+
+  // Shipping
+  if (product.shipping) { score += 15; reasons.push('Shipping info available') }
+  else if (q.includes('shipping') || q.includes('delivery')) { weaknesses.push('No shipping info — query asks for this') }
+  else { weaknesses.push('No shipping info') }
+
+  // Tags
+  if (product.tags && product.tags.length >= 3) { score += 15; reasons.push('Rich product tags') }
+  else { weaknesses.push('Few or no tags') }
+
+  // Query keyword match
+  const descLower = (product.description || '').toLowerCase()
+  const nameLower = (product.name || '').toLowerCase()
+  const combined = descLower + ' ' + nameLower + ' ' + (product.tags || []).join(' ').toLowerCase()
+  const queryWords = q.split(/\s+/).filter(w => w.length > 3)
+  const matched = queryWords.filter(w => combined.includes(w))
+  if (matched.length > 0) {
+    score += Math.min(25, matched.length * 8)
+    reasons.push(`Matches ${matched.length} query keyword${matched.length !== 1 ? 's' : ''}`)
+  } else {
+    weaknesses.push('No keyword match with query')
   }
-  return parts
+
+  return { score: Math.min(100, score), reasons, weaknesses }
 }
 
-function SkeletonResults() {
+function MatchScoreBar({ score }) {
+  const color = score >= 70 ? '#008060' : score >= 40 ? '#FFC453' : '#D72C0D'
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '16px', marginTop: '24px' }}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-        <div className="skeleton" style={{ height: '14px', width: '60%' }} />
-        {[1, 2].map(i => (
-          <div key={i} className="card-padded" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <div className="skeleton" style={{ height: '14px', width: '80%' }} />
-            <div className="skeleton" style={{ height: '11px', width: '50%' }} />
-            <div className="skeleton" style={{ height: '12px', width: '100%' }} />
-          </div>
-        ))}
+    <div className="flex items-center gap-2">
+      <div className="flex-1 bg-shopify-border rounded-full h-1.5">
+        <div
+          className="h-1.5 rounded-full transition-all duration-700"
+          style={{ width: `${score}%`, background: color }}
+        />
       </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-        <div className="skeleton" style={{ height: '14px', width: '60%' }} />
-        {[1, 2, 3, 4].map(i => (
-          <div key={i} className="card-padded" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <div className="skeleton" style={{ height: '14px', width: '80%' }} />
-            <div className="skeleton" style={{ height: '11px', width: '50%' }} />
-            <div className="skeleton" style={{ height: '12px', width: '100%' }} />
-          </div>
-        ))}
-      </div>
+      <span className="text-xs font-bold w-7 text-right" style={{ color }}>{score}</span>
     </div>
   )
 }
 
-const SUGGESTED = [
-  'High protein with reviews',
-  'Vegan bar with ingredients',
-  'Fast shipping under ₹400',
-]
-
-export default function Simulate({ storeData }) {
+export default function Simulate() {
   const [query, setQuery] = useState('')
+  const [results, setResults] = useState(null)
   const [loading, setLoading] = useState(false)
-  const [result, setResult] = useState(null)
-  const [error, setError] = useState(null)
-  const [lastQuery, setLastQuery] = useState(null)
 
-  const handleRun = useCallback(async (q) => {
-    const queryToRun = (q || query).trim()
-    if (!queryToRun) return
+  const runSimulation = async (q) => {
+    const testQuery = q || query
+    if (!testQuery.trim()) return
     setLoading(true)
-    setError(null)
-    setResult(null)
-    setLastQuery(queryToRun)
+    setResults(null)
 
-    try {
-      // Use live-simulate if connected to a store, otherwise fall back to mock
-      let res, data
-      if (storeData?.domain && storeData?.accessToken) {
-        res = await fetch('/api/live-simulate', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ domain: storeData.domain, accessToken: storeData.accessToken, query: queryToRun }),
-        })
-        data = await res.json()
-        if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
-        setResult(data.result)
-      } else {
-        res = await fetch('/api/simulate', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ query: queryToRun }),
-        })
-        data = await res.json()
-        if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
-        setResult(data)
-      }
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setLoading(false)
-    }
-  }, [query, storeData])
+    // Simulate API delay
+    await new Promise(r => setTimeout(r, 900))
 
-  const handleSuggestion = (s) => {
-    setQuery(s)
-    handleRun(s)
+    const scored = PRODUCTS.map(p => ({
+      ...p,
+      ...scoreProductForQuery(p, testQuery),
+    })).sort((a, b) => b.score - a.score)
+
+    setResults({ query: testQuery, products: scored })
+    setLoading(false)
   }
 
+  const handleQuickQuery = (q) => {
+    setQuery(q)
+    runSimulation(q)
+  }
+
+  const selected = results?.products.slice(0, 2) || []
+  const rejected = results?.products.slice(2) || []
+
   return (
-    <div style={{ animation: 'fadeIn 0.3s ease' }}>
+    <div className="space-y-5 max-w-3xl">
 
       {/* Header */}
-      <div style={{ marginBottom: '24px' }}>
-        <h1 className="page-title">Simulate AI Query</h1>
-        <p className="page-subtitle">
-          Test how an AI agent evaluates{' '}
-          {storeData?.domain ? `${storeData.domain}` : 'the mock store'} for any buyer search
+      <div>
+        <h1 className="text-xl font-semibold text-shopify-text">Simulate AI Query</h1>
+        <p className="text-sm text-shopify-secondary mt-0.5">
+          See which products your store surfaces when a customer searches using AI
         </p>
       </div>
 
-      {/* Mode badge */}
-      <div style={{ marginBottom: '16px' }}>
-        {storeData?.domain ? (
-          <span className="badge-success">● Live: {storeData.domain}</span>
-        ) : (
-          <span className="badge-neutral">● Demo mode — using mock store data</span>
-        )}
-      </div>
-
-      {/* Query card */}
-      <div className="card-padded" style={{ marginBottom: '20px' }}>
-        <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)', marginBottom: '8px' }}>
-          Enter a buyer query
-        </label>
-        <div style={{ display: 'flex', gap: '10px', marginBottom: '14px' }}>
+      {/* Input card */}
+      <div className="bg-white rounded-card shadow-card p-5 space-y-4">
+        <div className="flex gap-2">
           <input
-            className="input-field"
             type="text"
             value={query}
             onChange={e => setQuery(e.target.value)}
-            placeholder="e.g. best protein bar with free returns"
-            onKeyDown={e => e.key === 'Enter' && handleRun()}
+            onKeyDown={e => e.key === 'Enter' && runSimulation()}
+            placeholder='e.g. "best snowboard with free returns under ₹1000"'
+            className="flex-1 px-4 py-2.5 text-sm border border-shopify-border rounded-btn focus:outline-none focus:ring-1 focus:ring-shopify-green focus:border-shopify-green"
           />
           <button
-            className="btn-primary"
-            onClick={() => handleRun()}
-            disabled={loading || !query.trim()}
-            style={{ flexShrink: 0 }}
+            onClick={() => runSimulation()}
+            disabled={!query.trim() || loading}
+            className="bg-shopify-green hover:bg-shopify-green-dark disabled:opacity-50 text-white text-sm font-medium px-5 py-2.5 rounded-btn transition-colors whitespace-nowrap"
           >
             {loading ? (
-              <span style={{
-                width: '14px', height: '14px',
-                border: '2px solid rgba(255,255,255,0.4)',
-                borderTopColor: 'white',
-                borderRadius: '50%',
-                animation: 'spin 0.7s linear infinite',
-                display: 'inline-block',
-              }} />
-            ) : 'Run'}
+              <span className="flex items-center gap-2">
+                <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none">
+                  <circle cx="12" cy="12" r="10" stroke="white" strokeWidth="3" strokeOpacity="0.3"/>
+                  <path d="M12 2a10 10 0 0 1 10 10" stroke="white" strokeWidth="3" strokeLinecap="round"/>
+                </svg>
+                Running…
+              </span>
+            ) : 'Run Simulation'}
           </button>
         </div>
 
-        {/* Suggested queries */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-          <span style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 500 }}>Try:</span>
-          {SUGGESTED.map(s => (
-            <button
-              key={s}
-              onClick={() => handleSuggestion(s)}
-              disabled={loading}
-              style={{
-                background: 'white',
-                border: '1px solid var(--border)',
-                borderRadius: '20px',
-                padding: '4px 12px',
-                fontSize: '12px',
-                cursor: 'pointer',
-                color: 'var(--text-secondary)',
-                fontFamily: 'DM Sans, sans-serif',
-                transition: 'border-color 0.15s, color 0.15s',
-              }}
-              onMouseEnter={e => {
-                e.currentTarget.style.borderColor = 'var(--green)'
-                e.currentTarget.style.color = 'var(--green)'
-              }}
-              onMouseLeave={e => {
-                e.currentTarget.style.borderColor = 'var(--border)'
-                e.currentTarget.style.color = 'var(--text-secondary)'
-              }}
-            >
-              {s}
-            </button>
-          ))}
+        {/* Quick queries */}
+        <div>
+          <p className="text-xs text-shopify-secondary mb-2 font-medium">Quick examples:</p>
+          <div className="flex flex-wrap gap-2">
+            {SIMULATE_QUERIES.map((q, i) => (
+              <button
+                key={i}
+                onClick={() => handleQuickQuery(q)}
+                className="text-xs px-3 py-1.5 rounded-full border border-shopify-border text-shopify-secondary hover:border-shopify-green hover:text-shopify-green transition-colors"
+              >
+                {q}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
       {/* Loading skeleton */}
-      {loading && <SkeletonResults />}
+      {loading && (
+        <div className="space-y-3">
+          {[1,2,3].map(i => (
+            <div key={i} className="bg-white rounded-card shadow-card p-5 animate-pulse">
+              <div className="h-4 bg-shopify-border rounded w-1/3 mb-3" />
+              <div className="h-3 bg-shopify-border rounded w-full mb-2" />
+              <div className="h-3 bg-shopify-border rounded w-2/3" />
+            </div>
+          ))}
+        </div>
+      )}
 
-      {/* Error */}
-      {error && !loading && (
-        <div style={{
-          background: 'var(--red-light)', border: '1px solid var(--red-border)',
-          borderRadius: 'var(--radius-md)', padding: '14px 18px',
-          color: 'var(--red)', fontSize: '13px',
-        }}>
-          <strong>Error: </strong>{error}
+      {/* Empty state */}
+      {!loading && !results && (
+        <div className="bg-white rounded-card shadow-card py-14 flex flex-col items-center text-center gap-3">
+          <span className="text-4xl">🔍</span>
+          <p className="text-sm font-medium text-shopify-text">Enter a search query above</p>
+          <p className="text-xs text-shopify-secondary max-w-xs">
+            Type any query a customer might use — we'll show you exactly which products would surface in AI results and why.
+          </p>
         </div>
       )}
 
       {/* Results */}
-      {result && !loading && (
-        <div style={{ animation: 'fadeInUp 0.3s ease both' }}>
-          <div style={{
-            marginBottom: '14px',
-            padding: '10px 14px',
-            background: 'var(--bg-surface)',
-            border: '1px solid var(--border)',
-            borderRadius: 'var(--radius-sm)',
-            fontSize: '12px',
-            color: 'var(--text-secondary)',
-            fontFamily: 'DM Mono, monospace',
-          }}>
-            Query: "{lastQuery}"
+      {!loading && results && (
+        <div className="space-y-4 fade-up">
+
+          {/* Query echo */}
+          <div className="flex items-center gap-2 px-1">
+            <span className="text-xs text-shopify-secondary">Results for:</span>
+            <span className="text-xs font-semibold text-shopify-text bg-white border border-shopify-border rounded-full px-3 py-0.5">
+              "{results.query}"
+            </span>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '16px' }}>
-
-            {/* Selected */}
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
-                <span style={{ fontSize: '14px', fontWeight: 600, color: 'var(--green)' }}>
-                  ✓ Recommended
-                </span>
-                <span className="badge-success">{result.selected?.length || 0}</span>
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {(result.selected || []).map((p, i) => (
-                  <div key={p.id || i} className="card" style={{
-                    padding: '16px',
-                    borderLeft: '3px solid var(--green)',
-                    animation: `fadeInUp 0.3s ease both`,
-                    animationDelay: `${i * 0.06}s`,
-                  }}>
-                    <p style={{ fontWeight: 600, fontSize: '14px', marginBottom: '8px', color: 'var(--text-primary)' }}>
-                      {p.name}
-                    </p>
-                    <p style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-muted)', fontWeight: 600, marginBottom: '4px' }}>
-                      Reason selected
-                    </p>
-                    <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-                      {p.reason_chosen}
-                    </p>
-                  </div>
-                ))}
-                {(!result.selected || result.selected.length === 0) && (
-                  <div className="card-padded" style={{ color: 'var(--text-muted)', fontSize: '13px', textAlign: 'center' }}>
-                    No products selected
-                  </div>
-                )}
-              </div>
+          {/* Selected (top 2) */}
+          <div>
+            <div className="flex items-center gap-2 mb-2 px-1">
+              <span className="w-2.5 h-2.5 rounded-full bg-shopify-green" />
+              <p className="text-xs font-semibold uppercase tracking-wide text-shopify-green">
+                AI Would Surface These (Top 2)
+              </p>
             </div>
-
-            {/* Rejected */}
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
-                <span style={{ fontSize: '14px', fontWeight: 600, color: 'var(--red)' }}>
-                  ✗ Not Recommended
-                </span>
-                <span className="badge-critical">{result.rejected?.length || 0}</span>
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {(result.rejected || []).map((p, i) => (
-                  <div key={p.id || i} className="card" style={{
-                    padding: '16px',
-                    borderLeft: '3px solid var(--red)',
-                    animation: `fadeInUp 0.3s ease both`,
-                    animationDelay: `${i * 0.04}s`,
-                  }}>
-                    <p style={{ fontWeight: 600, fontSize: '14px', marginBottom: '8px', color: 'var(--text-primary)' }}>
-                      {p.name}
-                    </p>
-                    <p style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-muted)', fontWeight: 600, marginBottom: '4px' }}>
-                      Reason skipped
-                    </p>
-                    <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-                      {highlightKeywords(p.reason_rejected)}
-                    </p>
+            <div className="space-y-2">
+              {selected.map((p, i) => (
+                <div key={p.id} className="bg-white rounded-card shadow-card p-5 border-l-4 border-shopify-green">
+                  <div className="flex items-start justify-between gap-4 mb-3">
+                    <div>
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <span className="text-xs font-bold text-shopify-green bg-shopify-success-light rounded-full px-2 py-0.5">#{i + 1}</span>
+                        <p className="text-sm font-semibold text-shopify-text">{p.name}</p>
+                      </div>
+                      <p className="text-xs text-shopify-secondary">{p.category} · {p.price}</p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="text-2xl font-bold text-shopify-green">{p.score}</p>
+                      <p className="text-xs text-shopify-secondary">match</p>
+                    </div>
                   </div>
-                ))}
-              </div>
+                  <MatchScoreBar score={p.score} />
+                  <div className="mt-3 flex flex-wrap gap-1">
+                    {p.reasons.map((r, j) => (
+                      <span key={j} className="text-xs bg-shopify-success-light text-shopify-green px-2 py-0.5 rounded-full">✓ {r}</span>
+                    ))}
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
+
+          {/* Rejected */}
+          <div>
+            <div className="flex items-center gap-2 mb-2 px-1">
+              <span className="w-2.5 h-2.5 rounded-full bg-shopify-border" />
+              <p className="text-xs font-semibold uppercase tracking-wide text-shopify-secondary">
+                Not Selected ({rejected.length})
+              </p>
+            </div>
+            <div className="bg-white rounded-card shadow-card overflow-hidden">
+              {rejected.length === 0 ? (
+                <p className="px-5 py-4 text-sm text-shopify-secondary">All products were surfaced.</p>
+              ) : (
+                <div className="divide-y divide-shopify-border">
+                  {rejected.map(p => (
+                    <div key={p.id} className="px-5 py-3.5">
+                      <div className="flex items-center justify-between gap-3 mb-1.5">
+                        <div>
+                          <p className="text-sm font-medium text-shopify-text">{p.name}</p>
+                          <p className="text-xs text-shopify-secondary">{p.price}</p>
+                        </div>
+                        <div className="shrink-0 w-28">
+                          <MatchScoreBar score={p.score} />
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {p.weaknesses.map((w, j) => (
+                          <span key={j} className="text-xs bg-shopify-critical-light text-shopify-critical px-2 py-0.5 rounded-full">✗ {w}</span>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
         </div>
       )}
     </div>

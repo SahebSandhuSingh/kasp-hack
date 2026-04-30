@@ -1,292 +1,202 @@
 import { useState } from 'react'
 
-function CheckIcon({ pass }) {
-  return pass
-    ? <span style={{ color: 'var(--green)', fontWeight: 700 }}>✓</span>
-    : <span style={{ color: 'var(--red)', fontWeight: 700 }}>✗</span>
-}
+const STEPS = [
+  'Go to your Shopify Admin',
+  'Click Settings → Apps and sales channels',
+  'Click Develop apps → Create an app',
+  'Under API credentials, click Install app',
+  'Copy the Admin API access token',
+]
 
-function CompletionBadge({ hasDescription, hasReturn, hasShipping }) {
-  const score = [hasDescription, hasReturn, hasShipping].filter(Boolean).length
-  if (score === 3) return <span className="badge-success">Ready</span>
-  if (score === 2) return <span className="badge-warning">Partial</span>
-  return <span className="badge-critical">Incomplete</span>
-}
+export default function ConnectStore({ onConnected }) {
+  const [domain, setDomain] = useState('')
+  const [token, setToken] = useState('')
+  const [showToken, setShowToken] = useState(false)
+  const [showHelp, setShowHelp] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState(null)
 
-export default function ConnectStore({ storeData, setStoreData, setAuditData, setView }) {
-  const [domain, setDomain] = useState(storeData?.domain || '')
-  const [accessToken, setAccessToken] = useState(storeData?.accessToken || '')
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    const cleanDomain = domain.trim()
+    const cleanToken = token.trim()
 
-  const [connecting, setConnecting] = useState(false)
-  const [connectError, setConnectError] = useState(null)
-  const [preview, setPreview] = useState(null)   // { domain, product_count, products }
-
-  const [auditing, setAuditing] = useState(false)
-  const [auditError, setAuditError] = useState(null)
-
-  const handleConnect = async () => {
-    if (!domain.trim() || !accessToken.trim()) {
-      setConnectError('Both store domain and access token are required.')
+    if (!cleanDomain || !cleanToken) {
+      setError('Both store URL and access token are required.')
       return
     }
-    setConnecting(true)
-    setConnectError(null)
-    setPreview(null)
+
+    setLoading(true)
+    setError(null)
+
     try {
       const res = await fetch('/api/connect-store', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ domain: domain.trim(), accessToken: accessToken.trim() }),
+        body: JSON.stringify({ domain: cleanDomain, accessToken: cleanToken }),
       })
       const data = await res.json()
-      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
-      setPreview(data.store)
-      setStoreData({ domain: data.store.domain, accessToken: accessToken.trim(), productCount: data.store.product_count })
-    } catch (err) {
-      setConnectError(err.message)
-    } finally {
-      setConnecting(false)
-    }
-  }
 
-  const handleRunAudit = async () => {
-    setAuditing(true)
-    setAuditError(null)
-    try {
-      const res = await fetch('/api/live-audit', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ domain: preview.domain, accessToken: accessToken.trim() }),
+      if (!res.ok) {
+        throw new Error(data.error || `Connection failed (HTTP ${res.status})`)
+      }
+
+      // Pass store info to parent
+      onConnected({
+        domain: data.store.domain,
+        accessToken: cleanToken,
+        productCount: data.store.product_count,
       })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
-      setAuditData(data.audit)
-      setView('dashboard')
     } catch (err) {
-      setAuditError(err.message)
+      setError(err.message)
     } finally {
-      setAuditing(false)
+      setLoading(false)
     }
   }
 
   return (
-    <div style={{ maxWidth: '560px', margin: '0 auto', animation: 'fadeInUp 0.3s ease both' }}>
+    <div className="min-h-screen bg-shopify-bg flex items-center justify-center px-4 py-12">
+      <div className="w-full max-w-[480px] fade-up">
 
-      {/* Header */}
-      <div style={{ marginBottom: '24px' }}>
-        <h1 className="page-title">Connect Your Shopify Store</h1>
-        <p className="page-subtitle">Enter your store credentials to analyze your live product catalog</p>
-      </div>
-
-      {/* Success banner */}
-      {preview && (
-        <div style={{
-          background: 'var(--green-light)',
-          border: '1px solid var(--green-border)',
-          borderRadius: 'var(--radius-sm)',
-          padding: '12px 16px',
-          marginBottom: '20px',
-          color: 'var(--green)',
-          fontSize: '14px',
-          fontWeight: 500,
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px',
-        }}>
-          <span style={{ fontSize: '16px' }}>✓</span>
-          Connected to <strong>{preview.domain}</strong> — {preview.product_count} products found
-        </div>
-      )}
-
-      {/* Credentials card */}
-      <div className="card-padded" style={{ borderTop: '3px solid var(--green)', marginBottom: '20px' }}>
-
-        {/* Domain field */}
-        <div style={{ marginBottom: '18px' }}>
-          <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)', marginBottom: '4px' }}>
-            Store Domain
-          </label>
-          <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '8px' }}>
-            Found in your Shopify admin URL
-          </p>
-          <input
-            className="input-field"
-            type="text"
-            value={domain}
-            onChange={e => setDomain(e.target.value)}
-            placeholder="your-store.myshopify.com"
-            disabled={connecting}
-          />
-        </div>
-
-        {/* Token field */}
-        <div style={{ marginBottom: '20px' }}>
-          <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)', marginBottom: '4px' }}>
-            Admin API Access Token
-          </label>
-          <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '8px' }}>
-            Settings → Apps → Develop apps → your app → API credentials
-          </p>
-          <input
-            className="input-field"
-            type="password"
-            value={accessToken}
-            onChange={e => setAccessToken(e.target.value)}
-            placeholder="shpat_xxxxxxxxxxxxxxxxxxxx"
-            disabled={connecting}
-          />
-        </div>
-
-        {/* Error */}
-        {connectError && (
-          <div style={{
-            background: 'var(--red-light)',
-            border: '1px solid var(--red-border)',
-            borderRadius: 'var(--radius-sm)',
-            padding: '10px 14px',
-            color: 'var(--red)',
-            fontSize: '13px',
-            marginBottom: '16px',
-          }}>
-            {connectError}
-          </div>
-        )}
-
-        {/* Connect button */}
-        <button
-          className="btn-primary"
-          style={{ width: '100%', justifyContent: 'center', padding: '10px' }}
-          onClick={handleConnect}
-          disabled={connecting}
-        >
-          {connecting ? (
-            <>
-              <span style={{
-                width: '14px', height: '14px',
-                border: '2px solid rgba(255,255,255,0.4)',
-                borderTopColor: 'white',
-                borderRadius: '50%',
-                animation: 'spin 0.7s linear infinite',
-                flexShrink: 0,
-              }} />
-              Fetching products…
-            </>
-          ) : 'Connect & Fetch Products'}
-        </button>
-
-        {connecting && (
-          <p style={{ textAlign: 'center', fontSize: '12px', color: 'var(--text-muted)', marginTop: '8px' }}>
-            Connecting to Shopify Admin API…
-          </p>
-        )}
-      </div>
-
-      {/* Demo mode link */}
-      {!preview && (
-        <p style={{ textAlign: 'center', fontSize: '13px', color: 'var(--text-muted)' }}>
-          Don't have credentials?{' '}
-          <button
-            onClick={() => setView('dashboard')}
-            style={{ background: 'none', border: 'none', color: 'var(--green)', cursor: 'pointer', fontSize: '13px', fontWeight: 500, padding: 0 }}
-          >
-            Use demo data instead →
-          </button>
-        </p>
-      )}
-
-      {/* Product preview table */}
-      {preview && preview.products && (
-        <div className="card" style={{ marginBottom: '20px', animation: 'fadeInUp 0.3s ease both', overflow: 'hidden' }}>
-          <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--border)', background: 'var(--bg-surface-2)' }}>
-            <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>
-              Product Preview — {preview.product_count} products
+        {/* Logo & tagline */}
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center gap-2.5 mb-3">
+            <div className="w-9 h-9 rounded-lg bg-shopify-green flex items-center justify-center shadow-card">
+              <span className="text-white text-sm font-bold">AI</span>
+            </div>
+            <span className="text-lg font-semibold text-shopify-text tracking-tight">
+              AI Rep Optimizer
             </span>
           </div>
-          <div style={{ overflowX: 'auto' }}>
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Product</th>
-                  <th>Price</th>
-                  <th style={{ textAlign: 'center' }}>Desc</th>
-                  <th style={{ textAlign: 'center' }}>Returns</th>
-                  <th style={{ textAlign: 'center' }}>Shipping</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {preview.products.slice(0, 10).map(p => (
-                  <tr key={p.id}>
-                    <td style={{ fontWeight: 500, maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {p.name.length > 40 ? p.name.slice(0, 40) + '…' : p.name}
-                    </td>
-                    <td style={{ fontFamily: 'DM Mono, monospace', fontSize: '12px', color: 'var(--text-secondary)' }}>
-                      ₹{p.price}
-                    </td>
-                    <td style={{ textAlign: 'center' }}><CheckIcon pass={p.has_description} /></td>
-                    <td style={{ textAlign: 'center' }}><CheckIcon pass={p.has_return_policy} /></td>
-                    <td style={{ textAlign: 'center' }}><CheckIcon pass={p.has_shipping} /></td>
-                    <td>
-                      <CompletionBadge
-                        hasDescription={p.has_description}
-                        hasReturn={p.has_return_policy}
-                        hasShipping={p.has_shipping}
-                      />
-                    </td>
-                  </tr>
-                ))}
-                {preview.products.length > 10 && (
-                  <tr>
-                    <td colSpan={6} style={{ color: 'var(--text-muted)', fontSize: '12px', textAlign: 'center', padding: '10px', background: 'var(--bg-surface-2)' }}>
-                      + {preview.products.length - 10} more products
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Audit section */}
-          <div style={{ padding: '16px', borderTop: '1px solid var(--border)', background: 'var(--bg-surface-2)' }}>
-            {auditError && (
-              <div style={{
-                background: 'var(--red-light)', border: '1px solid var(--red-border)',
-                borderRadius: 'var(--radius-sm)', padding: '10px 14px',
-                color: 'var(--red)', fontSize: '13px', marginBottom: '12px',
-              }}>
-                {auditError}
-              </div>
-            )}
-
-            <button
-              className="btn-primary"
-              style={{ width: '100%', justifyContent: 'center', padding: '10px' }}
-              onClick={handleRunAudit}
-              disabled={auditing}
-            >
-              {auditing ? (
-                <>
-                  <span style={{
-                    width: '14px', height: '14px',
-                    border: '2px solid rgba(255,255,255,0.4)',
-                    borderTopColor: 'white',
-                    borderRadius: '50%',
-                    animation: 'spin 0.7s linear infinite',
-                    flexShrink: 0,
-                  }} />
-                  Running AI audit…
-                </>
-              ) : 'Run AI Audit →'}
-            </button>
-
-            {auditing && (
-              <p style={{ textAlign: 'center', fontSize: '12px', color: 'var(--text-muted)', marginTop: '8px' }}>
-                Running 7 queries against your products — this takes ~2 minutes
-              </p>
-            )}
-          </div>
+          <p className="text-sm text-shopify-secondary">
+            Optimize your products for AI-powered shopping
+          </p>
         </div>
-      )}
+
+        {/* Main card */}
+        <div className="bg-white rounded-card shadow-card">
+          <div className="px-6 py-5 border-b border-shopify-border">
+            <h1 className="text-base font-semibold text-shopify-text">Connect your Shopify Store</h1>
+            <p className="text-xs text-shopify-secondary mt-0.5">
+              We'll fetch your products and analyze them for AI readiness
+            </p>
+          </div>
+
+          <form onSubmit={handleSubmit} className="px-6 py-5 space-y-5">
+
+            {/* Store URL */}
+            <div>
+              <label htmlFor="store-domain" className="block text-sm font-medium text-shopify-text mb-1">
+                Store URL
+              </label>
+              <input
+                id="store-domain"
+                type="text"
+                value={domain}
+                onChange={e => setDomain(e.target.value)}
+                placeholder="yourstore.myshopify.com"
+                disabled={loading}
+                className="w-full px-3 py-2 text-sm border border-[#C9CCCF] rounded-btn
+                  focus:outline-none focus:ring-1 focus:ring-shopify-green focus:border-shopify-green
+                  disabled:opacity-50 disabled:bg-shopify-bg"
+              />
+              <p className="text-xs text-shopify-secondary mt-1">
+                Enter your store's <span className="font-mono text-xs">.myshopify.com</span> domain
+              </p>
+            </div>
+
+            {/* Access Token */}
+            <div>
+              <label htmlFor="access-token" className="block text-sm font-medium text-shopify-text mb-1">
+                Admin API Access Token
+              </label>
+              <div className="relative">
+                <input
+                  id="access-token"
+                  type={showToken ? 'text' : 'password'}
+                  value={token}
+                  onChange={e => setToken(e.target.value)}
+                  placeholder="shpat_xxxxxxxxxxxx"
+                  disabled={loading}
+                  className="w-full px-3 py-2 pr-10 text-sm border border-[#C9CCCF] rounded-btn
+                    focus:outline-none focus:ring-1 focus:ring-shopify-green focus:border-shopify-green
+                    disabled:opacity-50 disabled:bg-shopify-bg font-mono"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowToken(!showToken)}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-shopify-secondary hover:text-shopify-text text-xs"
+                  tabIndex={-1}
+                >
+                  {showToken ? 'Hide' : 'Show'}
+                </button>
+              </div>
+              <p className="text-xs text-shopify-secondary mt-1">
+                Found in Shopify Admin → Apps → API credentials
+              </p>
+
+              {/* Error message below token field */}
+              {error && (
+                <div className="mt-2 bg-shopify-critical-light border border-red-200 rounded-btn px-3 py-2">
+                  <p className="text-xs text-shopify-critical font-medium">{error}</p>
+                </div>
+              )}
+            </div>
+
+            {/* How-to collapsible */}
+            <div className="border border-shopify-border rounded-btn overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setShowHelp(!showHelp)}
+                className="w-full flex items-center justify-between px-3 py-2.5 text-sm text-shopify-secondary hover:bg-shopify-bg transition-colors"
+              >
+                <span className="font-medium">How to get your access token</span>
+                <span className={`text-xs transition-transform ${showHelp ? 'rotate-180' : ''}`}>▼</span>
+              </button>
+              {showHelp && (
+                <div className="px-3 pb-3 border-t border-shopify-border bg-shopify-bg">
+                  <ol className="space-y-2 mt-3">
+                    {STEPS.map((step, i) => (
+                      <li key={i} className="flex gap-2.5 text-sm text-shopify-text">
+                        <span className="w-5 h-5 rounded-full bg-shopify-green text-white text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">
+                          {i + 1}
+                        </span>
+                        {step}
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+              )}
+            </div>
+
+            {/* Submit */}
+            <button
+              type="submit"
+              disabled={loading || !domain.trim() || !token.trim()}
+              className="w-full bg-shopify-green hover:bg-shopify-green-dark disabled:opacity-50
+                text-white text-sm font-medium py-2.5 rounded-btn transition-colors
+                flex items-center justify-center gap-2"
+            >
+              {loading ? (
+                <>
+                  <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none">
+                    <circle cx="12" cy="12" r="10" stroke="white" strokeWidth="3" strokeOpacity="0.3"/>
+                    <path d="M12 2a10 10 0 0 1 10 10" stroke="white" strokeWidth="3" strokeLinecap="round"/>
+                  </svg>
+                  Connecting to store…
+                </>
+              ) : (
+                'Connect Store'
+              )}
+            </button>
+          </form>
+        </div>
+
+        {/* Footer */}
+        <p className="text-center text-xs text-shopify-secondary mt-4">
+          Your credentials are stored locally and never shared
+        </p>
+      </div>
     </div>
   )
 }
