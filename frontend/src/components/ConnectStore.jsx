@@ -61,9 +61,7 @@ export default function ConnectStore({ onConnected }) {
         {/* Logo & tagline */}
         <div className="text-center mb-8">
           <div className="inline-flex items-center gap-2.5 mb-3">
-            <div className="w-9 h-9 rounded-lg bg-shopify-green flex items-center justify-center shadow-card">
-              <span className="text-white text-sm font-bold">AI</span>
-            </div>
+            <img src="/logo.png" alt="AI Rep Optimizer Logo" className="w-9 h-9 rounded-lg shadow-card object-cover" />
             <span className="text-lg font-semibold text-shopify-text tracking-tight">
               AI Rep Optimizer
             </span>
@@ -151,7 +149,9 @@ export default function ConnectStore({ onConnected }) {
                 className="w-full flex items-center justify-between px-3 py-2.5 text-sm text-shopify-secondary hover:bg-shopify-bg transition-colors"
               >
                 <span className="font-medium">How to get your access token</span>
-                <span className={`text-xs transition-transform ${showHelp ? 'rotate-180' : ''}`}>▼</span>
+                <svg className={`transition-transform ${showHelp ? 'rotate-180' : ''}`} width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M3 4.5L6 7.5L9 4.5"/>
+                </svg>
               </button>
               {showHelp && (
                 <div className="px-3 pb-3 border-t border-shopify-border bg-shopify-bg">

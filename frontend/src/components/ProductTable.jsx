@@ -23,8 +23,19 @@ function ScorePill({ score }) {
 }
 
 function SortIcon({ col, sortKey, sortDir }) {
-  if (sortKey !== col) return <span className="text-shopify-border ml-1">↕</span>
-  return <span className="text-shopify-green ml-1">{sortDir === 'asc' ? '↑' : '↓'}</span>
+  if (sortKey !== col) return (
+    <svg className="inline ml-1 text-shopify-border" width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+      <path d="M3 3.5L5 1.5L7 3.5M3 6.5L5 8.5L7 6.5"/>
+    </svg>
+  )
+  return (
+    <svg className="inline ml-1 text-shopify-green" width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+      {sortDir === 'asc'
+        ? <path d="M3 6.5L5 4L7 6.5"/>
+        : <path d="M3 4L5 6.5L7 4"/>
+      }
+    </svg>
+  )
 }
 
 export default function ProductTable({ setView, setSelectedProduct }) {
@@ -71,7 +82,10 @@ export default function ProductTable({ setView, setSelectedProduct }) {
       <div className="bg-white rounded-card shadow-card px-4 py-3 flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
         {/* Search */}
         <div className="relative flex-1 max-w-sm">
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-shopify-secondary text-sm">🔍</span>
+          <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-shopify-secondary" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+            <circle cx="7" cy="7" r="4.5"/>
+            <path d="M10.5 10.5L14 14"/>
+          </svg>
           <input
             type="text"
             placeholder="Search products…"
@@ -106,7 +120,11 @@ export default function ProductTable({ setView, setSelectedProduct }) {
       <div className="bg-white rounded-card shadow-card overflow-hidden">
         {filtered.length === 0 ? (
           <div className="py-16 flex flex-col items-center gap-2 text-center">
-            <span className="text-3xl">📦</span>
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#6D7175" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+              <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
+              <line x1="12" y1="22.08" x2="12" y2="12"/>
+            </svg>
             <p className="text-sm font-medium text-shopify-text">No products match your search</p>
             <p className="text-xs text-shopify-secondary">Try a different search term or clear the filter</p>
             <button

@@ -14,6 +14,9 @@ const PORT = 3001;
 app.use(cors());
 app.use(express.json());
 
+const analyticsRoutes = require('./analyticsRoutes');
+app.use('/api', analyticsRoutes);
+
 // ──────────────────────────────────────────────
 // CONFIG
 // ──────────────────────────────────────────────
@@ -332,6 +335,30 @@ app.post('/api/connect-store', async (req, res) => {
       is_vegan: p.is_vegan,
       tag_count: p.tags ? p.tags.length : 0
     }));
+
+    // Fire off async background sync for the new database features
+    // We do not await this, so the frontend UI connects instantly.
+    const { fetchAndScoreProducts, fetchSalesData, today } = require('./shopifyDataService');
+    const db = require('./db');
+    (async () => {
+      try {
+        const { scored } = await fetchAndScoreProducts(domain, accessToken);
+        const date = today();
+        const snapStmt = db.prepare(`INSERT INTO score_snapshots (product_id, product_title, score, issues_count, snapshot_date, store_domain) VALUES (?, ?, ?, ?, ?, ?)`);
+        db.transaction((snaps) => {
+          for (const snap of snaps) snapStmt.run(snap.product_id, snap.product_title, snap.score, snap.issues_count || 0, date, cleanedDomain);
+        })(scored);
+
+        const salesData = await fetchSalesData(domain, accessToken);
+        const salesStmt = db.prepare(`INSERT INTO product_sales (product_id, product_title, revenue, orders_count, period_start, period_end, store_domain) VALUES (?, ?, ?, ?, ?, ?, ?)`);
+        db.transaction((items) => {
+          for (const item of items) salesStmt.run(item.product_id, item.product_title, item.revenue, item.orders_count, item.period_start, item.period_end, item.store_domain);
+        })(salesData);
+        console.log(`Background sync complete for ${cleanedDomain}`);
+      } catch (e) {
+        console.error('Background sync failed:', e.message);
+      }
+    })();
 
     return res.json({
       success: true,

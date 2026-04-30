@@ -1,10 +1,55 @@
 import { useState, useRef, useEffect } from 'react'
 
+// Clean inline SVG icons
+const icons = {
+  overview: (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="1" y="1" width="6" height="6" rx="1.5"/>
+      <rect x="9" y="1" width="6" height="6" rx="1.5"/>
+      <rect x="1" y="9" width="6" height="6" rx="1.5"/>
+      <rect x="9" y="9" width="6" height="6" rx="1.5"/>
+    </svg>
+  ),
+  products: (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+      <path d="M2 4h12M2 8h12M2 12h12"/>
+    </svg>
+  ),
+  optimize: (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M8 2v12M5 5l3-3 3 3M4 10h8"/>
+    </svg>
+  ),
+  simulate: (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+      <circle cx="7" cy="7" r="4.5"/>
+      <path d="M10.5 10.5L14 14"/>
+    </svg>
+  ),
+  analytics: (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M14 14H2V2"/>
+      <path d="M2 10l4-4 3 3 5-5"/>
+    </svg>
+  ),
+  chevronDown: (
+    <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 4.5L6 7.5L9 4.5"/>
+    </svg>
+  ),
+  logout: (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M6 14H3a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1h3M11 11l3-3-3-3M6 8h8"/>
+    </svg>
+  ),
+}
+
 const NAV_ITEMS = [
-  { id: 'dashboard',   label: 'Overview',  icon: '◎' },
-  { id: 'products',    label: 'Products',  icon: '☰' },
-  { id: 'beforeafter', label: 'Optimize',  icon: '⚡' },
-  { id: 'simulate',    label: 'Simulate',  icon: '🔍' },
+  { id: 'dashboard',   label: 'Overview',  icon: icons.overview },
+  { id: 'products',    label: 'Products',  icon: icons.products },
+  { id: 'beforeafter', label: 'Optimize',  icon: icons.optimize },
+  { id: 'simulate',    label: 'Simulate',  icon: icons.simulate },
+  { id: 'analytics',   label: 'Analytics', icon: icons.analytics },
 ]
 
 export default function Shell({ view, setView, storeData, onDisconnect, children }) {
@@ -33,9 +78,7 @@ export default function Shell({ view, setView, storeData, onDisconnect, children
 
           {/* Brand */}
           <div className="flex items-center gap-3">
-            <div className="w-7 h-7 rounded-md bg-shopify-green flex items-center justify-center">
-              <span className="text-white text-xs font-bold">AI</span>
-            </div>
+            <img src="/logo.png" alt="AI Rep Optimizer Logo" className="w-7 h-7 rounded-md object-cover" />
             <span className="font-semibold text-shopify-text text-sm tracking-tight">
               AI Rep Optimizer
             </span>
@@ -55,7 +98,7 @@ export default function Shell({ view, setView, storeData, onDisconnect, children
                   }
                 `}
               >
-                <span className="text-xs">{item.icon}</span>
+                {item.icon}
                 {item.label}
               </button>
             ))}
@@ -71,7 +114,9 @@ export default function Shell({ view, setView, storeData, onDisconnect, children
               <span className="text-xs text-shopify-secondary font-medium max-w-[180px] truncate">
                 {storeName}
               </span>
-              <span className={`text-[10px] text-shopify-secondary transition-transform ${dropdownOpen ? 'rotate-180' : ''}`}>▼</span>
+              <span className={`text-shopify-secondary transition-transform ${dropdownOpen ? 'rotate-180' : ''}`}>
+                {icons.chevronDown}
+              </span>
             </button>
 
             {/* Dropdown */}
@@ -92,7 +137,7 @@ export default function Shell({ view, setView, storeData, onDisconnect, children
                   }}
                   className="w-full text-left px-4 py-2.5 text-sm text-shopify-critical hover:bg-shopify-critical-light transition-colors flex items-center gap-2"
                 >
-                  <span className="text-xs">⏻</span>
+                  {icons.logout}
                   Disconnect store
                 </button>
               </div>

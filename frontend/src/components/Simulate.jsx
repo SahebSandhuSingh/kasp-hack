@@ -162,7 +162,10 @@ export default function Simulate() {
       {/* Empty state */}
       {!loading && !results && (
         <div className="bg-white rounded-card shadow-card py-14 flex flex-col items-center text-center gap-3">
-          <span className="text-4xl">🔍</span>
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#6D7175" strokeWidth="1.5" strokeLinecap="round">
+            <circle cx="11" cy="11" r="7"/>
+            <path d="M16 16l4.5 4.5"/>
+          </svg>
           <p className="text-sm font-medium text-shopify-text">Enter a search query above</p>
           <p className="text-xs text-shopify-secondary max-w-xs">
             Type any query a customer might use — we'll show you exactly which products would surface in AI results and why.

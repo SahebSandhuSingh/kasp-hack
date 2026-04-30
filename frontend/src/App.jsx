@@ -5,6 +5,7 @@ import Dashboard from './components/Dashboard.jsx'
 import ProductTable from './components/ProductTable.jsx'
 import BeforeAfter from './components/BeforeAfter.jsx'
 import Simulate from './components/Simulate.jsx'
+import Analytics from './components/Analytics.jsx'
 
 export default function App() {
   const [view, setView] = useState('dashboard')
@@ -39,6 +40,8 @@ export default function App() {
         return <BeforeAfter selectedProduct={selectedProduct} />
       case 'simulate':
         return <Simulate />
+      case 'analytics':
+        return <Analytics storeData={storeData} setView={setView} />
       default:
         return <Dashboard setView={setView} setSelectedProduct={setSelectedProduct} />
     }

@@ -68,7 +68,10 @@ function ScoreUpgrade({ before, after }) {
       </div>
       <div className="flex-1 text-center">
         <div className="flex items-center justify-center gap-1 text-shopify-green">
-          <span className="text-xl">↑</span>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/>
+            <polyline points="17 6 23 6 23 12"/>
+          </svg>
           <span className="text-lg font-bold">+{delta}</span>
         </div>
         <p className="text-xs text-shopify-secondary">projected improvement</p>
@@ -159,7 +162,13 @@ export default function BeforeAfter({ selectedProduct }) {
         </div>
       ) : (
         <div className="bg-shopify-success-light border border-shopify-green/20 rounded-card px-5 py-4">
-          <p className="text-sm font-semibold text-shopify-green">🎉 Optimization complete!</p>
+          <p className="text-sm font-semibold text-shopify-green flex items-center gap-2">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10"/>
+              <path d="M8 12l3 3 5-5"/>
+            </svg>
+            Optimization complete!
+          </p>
           <p className="text-xs text-shopify-secondary mt-1">
             Your product listing has been updated. AI systems will pick up the new data within 24–48 hours.
           </p>

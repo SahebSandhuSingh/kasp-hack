@@ -194,7 +194,10 @@ export default function Dashboard({ setView }) {
           </div>
           {critical.length === 0 ? (
             <div className="px-5 py-10 flex flex-col items-center text-center gap-2">
-              <span className="text-2xl">🎉</span>
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#008060" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="10"/>
+                <path d="M8 12l3 3 5-5"/>
+              </svg>
               <p className="text-sm font-medium text-shopify-text">No critical products!</p>
               <p className="text-xs text-shopify-secondary">All your products are in good shape.</p>
             </div>
