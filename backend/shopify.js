@@ -176,7 +176,12 @@ async function getAccessToken() {
 
 async function fetchProducts() {
   const SHOPIFY_STORE = process.env.SHOPIFY_STORE;
-  const token = await getAccessToken();
+  // Use static Admin API token (shpat_ / shpua_) — no OAuth exchange needed for private apps
+  const token = process.env.SHOPIFY_ACCESS_TOKEN;
+
+  if (!SHOPIFY_STORE || !token) {
+    throw new Error('SHOPIFY_STORE and SHOPIFY_ACCESS_TOKEN must be set in .env');
+  }
 
   try {
     const response = await axios.get(
@@ -191,7 +196,7 @@ async function fetchProducts() {
   } catch (err) {
     if (err.response) {
       if (err.response.status === 401) {
-        throw new Error('Invalid or expired access token — regenerate using curl command');
+        throw new Error('Invalid or expired access token — check SHOPIFY_ACCESS_TOKEN in .env');
       }
       if (err.response.status === 404) {
         throw new Error('Store not found — check SHOPIFY_STORE in .env');

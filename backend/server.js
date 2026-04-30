@@ -121,8 +121,7 @@ async function callLLM(products, query) {
 }
 
 // ──────────────────────────────────────────────
-// callGroq — uses Groq API with llama-3.3-70b
-// Used by live audit endpoints
+// callGroq — now uses OpenAI gpt-4o-mini
 // ──────────────────────────────────────────────
 async function callGroq(products, query) {
   const productBlock = products.map((p, i) => `
@@ -135,8 +134,8 @@ ${i + 1}. ID: ${p.id} | Name: ${p.name} | Price: ₹${p.price}
    Vegan: ${p.is_vegan === null ? "NOT SPECIFIED" : p.is_vegan}
 `).join("\n");
 
-  const systemPrompt = `You are a strict AI shopping agent evaluating products for a user query. 
-Recommend products based ONLY on the data provided. 
+  const systemPrompt = `You are a strict AI shopping agent evaluating products for a user query.
+Recommend products based ONLY on the data provided.
 Penalize missing data heavily — null return policy, vague descriptions, no reviews are rejection signals.
 Never assume information not explicitly present.
 Return ONLY valid JSON, no markdown, no text outside JSON.`;
@@ -164,9 +163,9 @@ Rules:
 - Never say "not the best fit" — say exactly what data was missing or why it failed`;
 
   const response = await axios.post(
-    "https://api.groq.com/openai/v1/chat/completions",
+    OPENAI_URL,
     {
-      model: "llama-3.3-70b-versatile",
+      model: "gpt-4o-mini",
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt }
@@ -176,7 +175,7 @@ Rules:
     },
     {
       headers: {
-        Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
+        Authorization: `Bearer ${OPENAI_API_KEY}`,
         "Content-Type": "application/json"
       }
     }
@@ -381,7 +380,7 @@ app.post('/api/live-audit', async (req, res) => {
       // 15s delay between calls to respect Groq free-tier TPM limit
       if (i < LIVE_QUERIES.length - 1) {
         console.log(`  ⏳ Waiting 15s before next query...`);
-        await sleep(15000);
+        await sleep(1000);
       }
     }
 
