@@ -553,3 +553,45 @@ app.listen(PORT, () => {
   console.log('   POST /api/live-audit');
   console.log('   POST /api/live-simulate\n');
 });
+
+// ──────────────────────────────────────────────
+// BACKGROUND CRON JOBS
+// ──────────────────────────────────────────────
+const { fetchAndScoreProducts, fetchSalesData, today } = require('./shopifyDataService');
+const db = require('./db');
+
+setInterval(async () => {
+  const domain = process.env.SHOPIFY_STORE_DOMAIN;
+  const accessToken = process.env.SHOPIFY_ACCESS_TOKEN;
+  
+  if (!domain || !accessToken) return;
+
+  const cleanDomain = domain.replace(/^https?:\/\//, '').replace(/\/+$/, '').trim();
+  const currentDate = today();
+
+  try {
+    // Check if snapshot exists today
+    const exists = db.prepare('SELECT 1 FROM score_snapshots WHERE store_domain = ? AND snapshot_date = ? LIMIT 1').get(cleanDomain, currentDate);
+    if (exists) return;
+
+    console.log(`\n[CRON] Daily sync triggered for ${cleanDomain}...`);
+    
+    // 1. Sync Products
+    const { scored } = await fetchAndScoreProducts(domain, accessToken);
+    const snapStmt = db.prepare(`INSERT INTO score_snapshots (product_id, product_title, score, issues_count, snapshot_date, store_domain) VALUES (?, ?, ?, ?, ?, ?)`);
+    db.transaction((snaps) => {
+      for (const snap of snaps) snapStmt.run(snap.product_id, snap.product_title, snap.score, snap.issues_count || 0, currentDate, cleanDomain);
+    })(scored);
+
+    // 2. Sync Sales
+    const salesData = await fetchSalesData(domain, accessToken);
+    const salesStmt = db.prepare(`INSERT INTO product_sales (product_id, product_title, revenue, orders_count, period_start, period_end, store_domain) VALUES (?, ?, ?, ?, ?, ?, ?)`);
+    db.transaction((items) => {
+      for (const item of items) salesStmt.run(item.product_id, item.product_title, item.revenue, item.orders_count, item.period_start, item.period_end, item.store_domain);
+    })(salesData);
+    
+    console.log(`[CRON] Sync complete for ${cleanDomain}`);
+  } catch (err) {
+    console.error('[CRON] Sync failed:', err.message);
+  }
+}, 60 * 60 * 1000); // Check every 60 minutes
