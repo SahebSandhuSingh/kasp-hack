@@ -1,23 +1,49 @@
 const axios = require('axios');
-require('dotenv').config();
+const path = require('path');
+require('dotenv').config({ path: path.resolve(__dirname, '..', '.env') });
 
 // ──────────────────────────────────────────────
-// HTML HELPERS
+// OLD HELPERS & fetchShopifyProducts (kept to not break /api/connect-store)
 // ──────────────────────────────────────────────
 
-// Strip all HTML tags from a string, return plain text
+// Strip all HTML tags, decode entities, collapse whitespace, and return plain text
 function stripHtml(html) {
   if (!html) return "";
-  return html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+  
+  // 1. Remove all HTML tags
+  let text = String(html).replace(/<[^>]*>/g, " ");
+  
+  // 2. Decode HTML entities
+  const entities = {
+    '&nbsp;': ' ',
+    '&amp;': '&',
+    '&lt;': '<',
+    '&gt;': '>',
+    '&quot;': '"',
+    '&#39;': "'",
+    '&apos;': "'"
+  };
+  text = text.replace(/&[#a-z0-9]+;/ig, (match) => {
+    return entities[match.toLowerCase()] || ' ';
+  });
+  
+  // 3. Collapse multiple whitespace/newlines into single spaces
+  return text.replace(/\s+/g, " ").trim();
 }
 
-// Check if text contains a keyword (case insensitive)
+// Get accurate word count after stripping HTML
+function getWordCount(text) {
+  if (!text) return 0;
+  const cleanText = stripHtml(text);
+  if (!cleanText) return 0;
+  return cleanText.split(/\s+/).filter(Boolean).length;
+}
+
 function containsKeyword(text, keyword) {
   if (!text) return false;
   return stripHtml(text).toLowerCase().includes(keyword.toLowerCase());
 }
 
-// Extract the first sentence containing a keyword
 function extractSentence(text, keyword) {
   if (!text) return null;
   const plain = stripHtml(text);
@@ -28,29 +54,16 @@ function extractSentence(text, keyword) {
   return match ? match.trim() : null;
 }
 
-// ──────────────────────────────────────────────
-// MAIN — fetchShopifyProducts
-// ──────────────────────────────────────────────
-
-/**
- * Fetches and maps products from a Shopify store.
- * @param {string} domain   - Shopify store domain (any format accepted)
- * @param {string} accessToken - Shopify Admin API access token
- * @returns {Promise<Array>} Mapped product array in internal format
- */
 async function fetchShopifyProducts(domain, accessToken) {
-  // 1. Validate inputs
   if (!domain || !accessToken) {
     throw new Error("domain and accessToken are required");
   }
 
-  // 2. Clean the domain — strip protocol and trailing slashes
   const cleanedDomain = domain
     .replace(/^https?:\/\//, "")
     .replace(/\/+$/, "")
     .trim();
 
-  // 3. Call Shopify Admin API
   let response;
   try {
     response = await axios.get(
@@ -78,12 +91,10 @@ async function fetchShopifyProducts(domain, accessToken) {
 
   const products = response.data.products || [];
 
-  // 4. Guard — empty store
   if (products.length === 0) {
     throw new Error("No products found in this store.");
   }
 
-  // 5. Map to internal format
   return products.map(product => ({
     id: product.id.toString(),
     name: product.title,
@@ -117,4 +128,135 @@ async function fetchShopifyProducts(domain, accessToken) {
   }));
 }
 
-module.exports = { fetchShopifyProducts };
+// ──────────────────────────────────────────────
+// NEW LIVE STORE FETCHING LOGIC (WITH AUTO-TOKEN MANAGER)
+// ──────────────────────────────────────────────
+
+const tokenCache = {
+  token: null,
+  expiresAt: null
+};
+
+async function getAccessToken() {
+  const store = process.env.SHOPIFY_STORE;
+  const clientId = process.env.SHOPIFY_CLIENT_ID;
+  const clientSecret = process.env.SHOPIFY_CLIENT_SECRET;
+
+  if (!store || !clientId || !clientSecret) {
+    throw new Error('Store credentials (STORE, CLIENT_ID, CLIENT_SECRET) missing in .env');
+  }
+
+  const now = Date.now();
+  // Check if token exists and expiresAt is more than 5 minutes (300,000 ms) from now
+  if (tokenCache.token && tokenCache.expiresAt && tokenCache.expiresAt > now + 300000) {
+    return tokenCache.token;
+  }
+
+  try {
+    const response = await axios.post(
+      `https://${store}/admin/oauth/access_token`,
+      {
+        client_id: clientId,
+        client_secret: clientSecret,
+        grant_type: "client_credentials"
+      },
+      { headers: { 'Content-Type': 'application/json' } }
+    );
+
+    const data = response.data;
+    tokenCache.token = data.access_token;
+    // expiresAt = now + (expires_in - 300) seconds
+    tokenCache.expiresAt = now + ((data.expires_in - 300) * 1000);
+
+    return tokenCache.token;
+  } catch (err) {
+    throw new Error('Failed to refresh Shopify access token: ' + (err.response?.data?.error || err.message));
+  }
+}
+
+async function fetchProducts() {
+  const SHOPIFY_STORE = process.env.SHOPIFY_STORE;
+  const token = await getAccessToken();
+
+  try {
+    const response = await axios.get(
+      `https://${SHOPIFY_STORE}/admin/api/2024-01/products.json?limit=250`,
+      {
+        headers: {
+          'X-Shopify-Access-Token': token
+        }
+      }
+    );
+    return response.data.products || [];
+  } catch (err) {
+    if (err.response) {
+      if (err.response.status === 401) {
+        throw new Error('Invalid or expired access token — regenerate using curl command');
+      }
+      if (err.response.status === 404) {
+        throw new Error('Store not found — check SHOPIFY_STORE in .env');
+      }
+    }
+    throw new Error(`Shopify API Error: ${err.message}`);
+  }
+}
+
+function normalizeProduct(product) {
+  const raw_html = product.body_html || '';
+  // simple regex to strip HTML as requested
+  const description = raw_html.replace(/<[^>]*>?/gm, '').trim();
+  
+  return {
+    id: product.id.toString(),
+    title: product.title,
+    description: description,
+    category: product.product_type || 'Uncategorized',
+    price: product.variants && product.variants.length > 0 ? product.variants[0].price : '0.00',
+    image: product.images && product.images.length > 0 ? product.images[0].src : null,
+    raw_html: raw_html
+  };
+}
+
+async function getStoreData() {
+  const rawProducts = await fetchProducts();
+  const normalizedProducts = rawProducts.map(normalizeProduct);
+  
+  const categories = [...new Set(normalizedProducts.map(p => p.category).filter(c => c))];
+  
+  let minPrice = Infinity;
+  let maxPrice = -Infinity;
+  
+  normalizedProducts.forEach(p => {
+    const priceVal = parseFloat(p.price);
+    if (!isNaN(priceVal)) {
+      if (priceVal < minPrice) minPrice = priceVal;
+      if (priceVal > maxPrice) maxPrice = priceVal;
+    }
+  });
+  
+  if (minPrice === Infinity) minPrice = 0;
+  if (maxPrice === -Infinity) maxPrice = 0;
+
+  const sample_products = normalizedProducts.slice(0, 3).map(p => ({
+    title: p.title,
+    description: p.description
+  }));
+
+  return {
+    store_name: process.env.SHOPIFY_STORE,
+    product_count: normalizedProducts.length,
+    products: normalizedProducts,
+    categories,
+    price_range: { min: minPrice, max: maxPrice },
+    sample_products
+  };
+}
+
+module.exports = { 
+  fetchShopifyProducts, 
+  stripHtml, 
+  getWordCount,
+  fetchProducts,
+  normalizeProduct,
+  getStoreData 
+};

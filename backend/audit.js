@@ -2,6 +2,7 @@ const path = require('path');
 require('dotenv').config({ path: path.resolve(__dirname, '..', '.env') });
 const axios = require('axios');
 const fs = require('fs');
+const { detectIssues } = require('./detect-issues');
 
 // ──────────────────────────────────────────────
 // CONFIG
@@ -184,25 +185,19 @@ function computeStats(allResults, products) {
 }
 
 // ──────────────────────────────────────────────
-// STEP 4 — Diagnose underperforming products
+// STEP 4 — Diagnose products (deterministic checks)
 // ──────────────────────────────────────────────
 function diagnose(productStats) {
+  // Load original product objects for structured data checks
+  const products = loadProducts();
+  const productLookup = {};
+  products.forEach(p => { productLookup[p.id] = p; });
+
   Object.values(productStats).forEach(stat => {
-    if (stat.inclusion_rate >= 60) return; // only flag underperformers
-
-    const reasons = stat.all_rejection_reasons.join(' ').toLowerCase();
-    const issues = new Set();
-
-    if (reasons.includes('return')) issues.add('missing_return_policy');
-    if (reasons.includes('shipping') || reasons.includes('delivery')) issues.add('missing_shipping_info');
-    if (reasons.includes('review') || reasons.includes('trust')) issues.add('weak_social_proof');
-    if (reasons.includes('description') || reasons.includes('vague') ||
-      reasons.includes('promotional')) issues.add('weak_description');
-    if (reasons.includes('ingredient')) issues.add('missing_ingredients');
-    if (reasons.includes('price') || reasons.includes('budget') ||
-      reasons.includes('expensive')) issues.add('price_issue');
-
-    stat.issues = Array.from(issues);
+    const product = productLookup[stat.id];
+    stat.issues = product
+      ? detectIssues(product).map(i => i.type)
+      : [];
   });
 }
 

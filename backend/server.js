@@ -4,7 +4,9 @@ const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
 const fs = require('fs');
-const { fetchShopifyProducts } = require('./shopify');
+const { fetchShopifyProducts, getStoreData } = require('./shopify');
+const { detectIssues } = require('./detect-issues');
+const { runCounterfactual } = require('./counterfactual');
 
 const app = express();
 const PORT = 3001;
@@ -183,20 +185,8 @@ Rules:
   return JSON.parse(response.data.choices[0].message.content);
 }
 
-// ──────────────────────────────────────────────
-// ISSUE FLAG DETECTION — used by live audit
-// ──────────────────────────────────────────────
-function detectIssues(rejectionReasons) {
-  const text = rejectionReasons.join(" ").toLowerCase();
-  const issues = [];
-  if (text.includes("return")) issues.push("missing_return_policy");
-  if (text.includes("shipping") || text.includes("delivery")) issues.push("missing_shipping_info");
-  if (text.includes("review") || text.includes("trust")) issues.push("weak_social_proof");
-  if (text.includes("description") || text.includes("vague")) issues.push("weak_description");
-  if (text.includes("ingredient") || text.includes("specification")) issues.push("missing_specifications");
-  if (text.includes("price") || text.includes("expensive")) issues.push("price_issue");
-  return issues;
-}
+// Issue detection now uses deterministic checks from detect-issues.js
+// (imported at top — no LLM calls needed)
 
 // ──────────────────────────────────────────────
 // IMPROVED PRODUCT (p7) — from improve.js
@@ -240,15 +230,11 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// GET /api/audit — serve the pre-generated audit report
-app.get('/api/audit', (req, res) => {
+// GET /api/audit — fetch live store data from Shopify
+app.get('/api/audit', async (req, res) => {
   try {
-    const reportPath = path.join(__dirname, 'audit_report.json');
-    if (!fs.existsSync(reportPath)) {
-      return res.status(404).json({ error: 'audit_report.json not found. Run node audit.js first.' });
-    }
-    const data = JSON.parse(fs.readFileSync(reportPath, 'utf-8'));
-    res.json(data);
+    const storeData = await getStoreData();
+    res.json(storeData);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -273,54 +259,38 @@ app.post('/api/simulate', async (req, res) => {
   }
 });
 
-// POST /api/rerun — before/after counterfactual for p7 (uses Groq)
+// POST /api/rerun — real counterfactual engine (no mocked data)
+// Accepts: { product_id, query, fixes[] } or falls back to p7 demo
 app.post('/api/rerun', async (req, res) => {
   try {
     const products = loadProducts();
-    const originalP7 = products.find(p => p.id === TARGET_ID);
+    const { product_id, query, fixes } = req.body;
 
-    // BEFORE — original data
-    const beforeResult = await callGroq(products, RERUN_QUERY);
+    // Resolve target product
+    const targetId = product_id || TARGET_ID;
+    const product = products.find(p => p.id === targetId);
+    if (!product) {
+      return res.status(404).json({ error: `Product ${targetId} not found` });
+    }
 
-    // Inject improved product
-    const updatedProducts = products.map(p => p.id === TARGET_ID ? improvedProduct : p);
+    // Resolve query — use provided, or fall back to default
+    const testQuery = query || RERUN_QUERY;
 
-    // AFTER — improved data
-    const afterResult = await callGroq(updatedProducts, RERUN_QUERY);
-
-    // Find p7 in each result
-    const beforeP7 = beforeResult.rejected.find(p => p.id === TARGET_ID)
-      || beforeResult.selected.find(p => p.id === TARGET_ID);
-    const afterP7Selected = afterResult.selected.find(p => p.id === TARGET_ID);
-    const afterP7Rejected = afterResult.rejected.find(p => p.id === TARGET_ID);
-
-    const delta = [
-      { field: 'description', before: 'Vague promotional text with no nutritional data', after: 'Detailed 4-sentence description with protein, sugar, ingredients, and purpose' },
-      { field: 'return_policy', before: originalP7 ? (originalP7.return_policy || 'null') : 'null', after: improvedProduct.return_policy },
-      { field: 'shipping', before: originalP7 ? (originalP7.shipping || 'null') : 'null', after: improvedProduct.shipping },
-      { field: 'rating', before: originalP7 ? String(originalP7.rating) : 'N/A', after: String(improvedProduct.rating) },
-      { field: 'review_count', before: originalP7 ? String(originalP7.review_count) + ' reviews' : 'N/A', after: String(improvedProduct.review_count) + ' reviews' },
-      { field: 'reviews', before: 'Empty array (no review text)', after: '3 detailed customer reviews with text' },
-      { field: 'ingredients', before: 'null', after: improvedProduct.ingredients },
+    // Resolve fixes — use provided, or fall back to demo fixes for p7
+    const appliedFixes = fixes || [
+      { field: 'description', suggested_improvement: improvedProduct.description },
+      { field: 'policies', suggested_improvement: improvedProduct.return_policy },
+      { field: 'shipping', suggested_improvement: improvedProduct.shipping },
+      { field: 'specifications', suggested_improvement: improvedProduct.ingredients },
     ];
 
-    res.json({
-      query: RERUN_QUERY,
-      before: {
-        status: beforeResult.selected.find(p => p.id === TARGET_ID) ? 'selected' : 'rejected',
-        reason: beforeP7 ? (beforeP7.reason_rejected || beforeP7.reason_chosen) : 'Not found in results',
-        originalData: originalP7
-      },
-      after: {
-        status: afterP7Selected ? 'selected' : 'rejected',
-        reason: afterP7Selected ? afterP7Selected.reason_chosen : (afterP7Rejected ? afterP7Rejected.reason_rejected : 'Not found in results'),
-        improvedData: improvedProduct
-      },
-      delta,
-      verdict: afterP7Selected
-        ? 'IMPROVEMENT CONFIRMED'
-        : 'STILL_REJECTED'
-    });
+    console.log(`\n🔬 Counterfactual: ${product.name} | query: "${testQuery}"`);
+
+    const result = await runCounterfactual(product, appliedFixes, testQuery);
+
+    console.log(`   Verdict: ${result.verdict} | delta: ${result.delta}`);
+
+    res.json(result);
   } catch (err) {
     console.error('POST /api/rerun error:', err.message);
     if (err.response) {
@@ -452,9 +422,12 @@ app.post('/api/live-audit', async (req, res) => {
       );
     });
 
-    // Detect issues for each product
+    // Detect issues deterministically from product data (not LLM output)
+    const productLookup = {};
+    products.forEach(p => { productLookup[p.id] = p; });
     Object.values(productStats).forEach(stat => {
-      stat.issues = detectIssues(stat.all_rejection_reasons);
+      const product = productLookup[stat.id];
+      stat.issues = product ? detectIssues(product) : [];
     });
 
     // Assign fix priority labels
