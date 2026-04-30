@@ -14,6 +14,7 @@ AI Representation Optimizer gives Shopify merchants clear, data-driven visibilit
 
 ## Table of Contents
 
+- [Team](#team)
 - [Overview](#overview)
 - [How It Works](#how-it-works)
 - [Features](#features)
@@ -24,9 +25,17 @@ AI Representation Optimizer gives Shopify merchants clear, data-driven visibilit
 - [API Reference](#api-reference)
 - [Demo Results](#demo-results)
 - [Roadmap](#roadmap)
-- [Team](#team)
+
 
 ---
+
+
+## Team
+
+| Name | Role |
+|---|---|
+| **aditzz073** | Full-Stack Engineering, Backend Architecture |
+| **SahebSandhuSingh** | AI Systems Engineering, Frontend Design |
 
 ## Overview
 
@@ -471,13 +480,6 @@ Pull requests are welcome. For significant changes, open an issue first to discu
 5. Open a pull request
 
 ---
-
-## Team
-
-| Name | Role |
-|---|---|
-| **aditzz073** | Full-Stack Engineering, Backend Architecture |
-| **SahebSandhuSingh** | AI Systems Engineering, Frontend Design |
 
 ---
 
