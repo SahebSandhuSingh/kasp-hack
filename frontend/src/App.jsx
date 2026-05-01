@@ -18,7 +18,7 @@ export default function App() {
       .then(r => r.ok ? r.json() : { products: [] })
       .then(data => setProducts(data.products || []))
       .catch(() => setProducts([]))
-  }, [])
+  }, [storeData])
 
   // Called when ConnectStore succeeds
   const handleConnected = (data) => {
