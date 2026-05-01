@@ -6,7 +6,7 @@ import { CATEGORY_LABELS, CATEGORY_COLORS, ALL_CATEGORIES } from '../categoryCon
 // HELPERS
 // ─────────────────────────────────────────
 const fetchJson = async (url) => {
-  const res = await fetch(url);
+  const res = await fetch(url, { credentials: 'include' });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();
 };
@@ -39,8 +39,8 @@ export default function Analytics({ storeData, setView }) {
     setError(null);
     try {
       const [traffic, history] = await Promise.all([
-        fetchJson(`/api/products/traffic-report?store=${storeData.domain}`),
-        fetchJson(`/api/snapshots/history?store=${storeData.domain}`)
+        fetchJson('/api/products/traffic-report'),
+        fetchJson('/api/snapshots/history')
       ]);
       setTrafficReport(traffic);
       setStoreHistory(history);
@@ -57,7 +57,7 @@ export default function Analytics({ storeData, setView }) {
   // Load product history when selected
   useEffect(() => {
     if (trendView === 'product' && selectedProduct && storeData?.domain) {
-      fetchJson(`/api/snapshots/history?store=${storeData.domain}&product_id=${selectedProduct}`)
+      fetchJson(`/api/snapshots/history?product_id=${selectedProduct}`)
         .then(setProductHistory)
         .catch(e => console.error(e));
     }
@@ -68,8 +68,9 @@ export default function Analytics({ storeData, setView }) {
     try {
       const res = await fetch('/api/refresh', {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ domain: storeData.domain })
+        body: JSON.stringify({})
       });
       if (!res.ok) throw new Error('Refresh failed');
       await loadData();

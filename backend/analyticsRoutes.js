@@ -3,12 +3,13 @@ const db = require('./db');
 const { fetchAndScoreProducts, fetchSalesData, today, getTrafficTier } = require('./shopifyDataService');
 const { getRubric, CATEGORY_LABELS, CATEGORY_COLORS, RUBRICS } = require('./categoryEngine');
 
+module.exports = function createAnalyticsRoutes(requireAuth) {
 const router = express.Router();
 
 // ─────────────────────────────────────────
 // SAVE SNAPSHOTS
 // ─────────────────────────────────────────
-router.post('/snapshots/save', (req, res) => {
+router.post('/snapshots/save', requireAuth, (req, res) => {
   const snapshots = req.body; // Array of scored products
   const date = today();
 
@@ -43,9 +44,9 @@ router.post('/snapshots/save', (req, res) => {
 // ─────────────────────────────────────────
 // GET SNAPSHOT HISTORY
 // ─────────────────────────────────────────
-router.get('/snapshots/history', (req, res) => {
-  const { store, product_id } = req.query;
-  if (!store) return res.status(400).json({ error: 'Store is required' });
+router.get('/snapshots/history', requireAuth, (req, res) => {
+  const { product_id } = req.query;
+  const store = req.storeSession.domain;
 
   try {
     if (product_id) {
@@ -78,9 +79,8 @@ router.get('/snapshots/history', (req, res) => {
 // ─────────────────────────────────────────
 // GET TRAFFIC REPORT
 // ─────────────────────────────────────────
-router.get('/products/traffic-report', (req, res) => {
-  const { store } = req.query;
-  if (!store) return res.status(400).json({ error: 'Store is required' });
+router.get('/products/traffic-report', requireAuth, (req, res) => {
+  const store = req.storeSession.domain;
 
   try {
     // Get latest snapshot for each product
@@ -133,7 +133,7 @@ router.get('/products/traffic-report', (req, res) => {
 // ─────────────────────────────────────────
 // SYNC SALES DATA
 // ─────────────────────────────────────────
-router.post('/sales/sync', (req, res) => {
+router.post('/sales/sync', requireAuth, (req, res) => {
   const sales = req.body;
 
   const stmt = db.prepare(`
@@ -167,9 +167,9 @@ router.post('/sales/sync', (req, res) => {
 // ─────────────────────────────────────────
 // MANUAL REFRESH ALL
 // ─────────────────────────────────────────
-router.post('/refresh', async (req, res) => {
-  const { domain, accessToken } = req.body;
-  if (!domain || !accessToken) return res.status(400).json({ error: "domain and accessToken required" });
+router.post('/refresh', requireAuth, async (req, res) => {
+  const domain = req.storeSession.domain;
+  const accessToken = req.storeSession.access_token;
 
   try {
     // 1. Fetch & Score Products
@@ -211,7 +211,7 @@ router.post('/refresh', async (req, res) => {
 // ─────────────────────────────────────────
 // GET /api/categories/rubric
 // ─────────────────────────────────────────
-router.get('/categories/rubric', (req, res) => {
+router.get('/categories/rubric', requireAuth, (req, res) => {
   const { category } = req.query;
   if (!category) return res.status(400).json({ error: 'category query param is required' });
 
@@ -235,9 +235,8 @@ router.get('/categories/rubric', (req, res) => {
 // ─────────────────────────────────────────
 // GET /api/categories/summary
 // ─────────────────────────────────────────
-router.get('/categories/summary', (req, res) => {
-  const { store } = req.query;
-  if (!store) return res.status(400).json({ error: 'store query param is required' });
+router.get('/categories/summary', requireAuth, (req, res) => {
+  const store = req.storeSession.domain;
 
   try {
     const rows = db.prepare(`
@@ -277,4 +276,5 @@ router.get('/categories/summary', (req, res) => {
   }
 });
 
-module.exports = router;
+return router;
+};

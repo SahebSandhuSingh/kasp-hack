@@ -95,7 +95,7 @@ function RubricModal({ category, onClose }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetch(`/api/categories/rubric?category=${category}`)
+    fetch(`/api/categories/rubric?category=${category}`, { credentials: 'include' })
       .then(r => r.json())
       .then(data => { setRubric(data); setLoading(false) })
       .catch(() => setLoading(false))
@@ -449,7 +449,7 @@ function HistoryTab({ storeData }) {
     if (!storeData?.domain) return
     setLoading(true)
     try {
-      const res = await fetch(`/api/products/optimization-history?store=${storeData.domain}`)
+      const res = await fetch('/api/products/optimization-history', { credentials: 'include' })
       if (!res.ok) throw new Error('Failed to load history')
       const data = await res.json()
       setHistory(data)
@@ -468,9 +468,9 @@ function HistoryTab({ storeData }) {
     try {
       const res = await fetch('/api/products/revert', {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          store_domain: storeData.domain,
           product_id: row.product_id,
           history_id: row.id,
         }),
@@ -692,9 +692,9 @@ export default function BeforeAfter({ selectedProduct, storeData, setView, produ
     try {
       const res = await fetch('/api/products/apply-optimization', {
         method: 'PUT',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          store_domain: storeData.domain,
           product_id: product.id,
           updates,
         }),

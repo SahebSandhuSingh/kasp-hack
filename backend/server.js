@@ -2,6 +2,7 @@ const path = require('path');
 require('dotenv').config({ path: path.resolve(__dirname, '.env') });
 const express = require('express');
 const cors = require('cors');
+const session = require('express-session');
 const axios = require('axios');
 const fs = require('fs');
 const { fetchShopifyProducts, getStoreData, getAccessToken } = require('./shopify');
@@ -16,9 +17,30 @@ const PORT = 3001;
 
 app.use(cors());
 app.use(express.json());
+app.use(session({
+  secret: process.env.SESSION_SECRET || 'ai-rep-optimizer-secret',
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    secure: false,
+    httpOnly: true,
+    maxAge: 24 * 60 * 60 * 1000
+  }
+}));
+
+function requireAuth(req, res, next) {
+  if (!req.session.store) {
+    return res.status(401).json({
+      error: "not_connected",
+      message: "Please connect your store first"
+    });
+  }
+  req.storeSession = req.session.store;
+  next();
+}
 
 const analyticsRoutes = require('./analyticsRoutes');
-app.use('/api', analyticsRoutes);
+app.use('/api', analyticsRoutes(requireAuth));
 
 // ──────────────────────────────────────────────
 // CONFIG
@@ -66,6 +88,116 @@ async function loadProducts() {
     vendor: p.vendor || null,
     shopify_url: `https://${process.env.SHOPIFY_STORE}/products/${p.handle}`
   }));
+}
+
+async function loadSessionProducts(domain, accessToken) {
+  const raw = await fetchShopifyProducts(domain, accessToken);
+  return raw.map(p => ({
+    id: p.id,
+    name: p.name,
+    price: p.price,
+    description: p.description || '',
+    return_policy: p.return_policy || null,
+    shipping: p.shipping || null,
+    rating: p.rating || null,
+    review_count: p.review_count || 0,
+    reviews: p.reviews || [],
+    tags: p.tags || [],
+    ingredients: p.ingredients || null,
+    is_vegan: p.is_vegan,
+    product_type: p.product_type || null,
+    vendor: p.vendor || null,
+    shopify_url: p.shopify_url
+  }));
+}
+
+function cleanStoreDomain(domain) {
+  return (domain || '')
+    .replace(/^https?:\/\//, "")
+    .replace(/\/+$/, "")
+    .trim()
+    .toLowerCase();
+}
+
+function normalizeStoreDomain(domain) {
+  const clean = cleanStoreDomain(domain);
+  if (!clean) return clean;
+  return clean.endsWith('.myshopify.com') ? clean : `${clean}.myshopify.com`;
+}
+
+async function verifyShopifyConnection(storeDomain, accessToken) {
+  return axios.get(
+    `https://${storeDomain}/admin/api/2024-01/shop.json`,
+    { headers: { 'X-Shopify-Access-Token': accessToken } }
+  );
+}
+
+async function resolveAccessToken(storeDomain, clientId, clientSecret) {
+  // 1. Try OAuth client_credentials exchange (works for Shopify custom apps)
+  try {
+    const tokenResp = await axios.post(
+      `https://${storeDomain}/admin/oauth/access_token`,
+      {
+        client_id: clientId,
+        client_secret: clientSecret,
+        grant_type: "client_credentials"
+      },
+      { headers: { 'Content-Type': 'application/json' } }
+    );
+    const accessToken = tokenResp.data.access_token;
+    const verified = await verifyShopifyConnection(storeDomain, accessToken);
+    return { accessToken, shop: verified.data.shop };
+  } catch (oauthErr) {
+    // Fall through to direct auth if OAuth exchange fails
+  }
+
+  // 2. Fallback: try using clientSecret directly as access token (shpat_ tokens)
+  const direct = await verifyShopifyConnection(storeDomain, clientSecret);
+  return { accessToken: clientSecret, shop: direct.data.shop };
+}
+
+async function checkScopeStatus(storeDomain, accessToken) {
+  const required = ["read_products", "read_orders"];
+  const recommended = ["write_products"];
+  const resp = await axios.get(
+    `https://${storeDomain}/admin/api/2024-01/access_scopes.json`,
+    { headers: { 'X-Shopify-Access-Token': accessToken } }
+  );
+  const scopes = (resp.data.access_scopes || []).map(s => s.handle);
+
+  return {
+    has_read_products: scopes.includes("read_products"),
+    has_write_products: scopes.includes("write_products"),
+    has_read_orders: scopes.includes("read_orders"),
+    missing_required: required.filter(scope => !scopes.includes(scope)),
+    missing_recommended: recommended.filter(scope => !scopes.includes(scope))
+  };
+}
+
+function startBackgroundSync(storeDomain, accessToken) {
+  (async () => {
+    try {
+      const { scored } = await fetchAndScoreProducts(storeDomain, accessToken);
+      const date = today();
+      const snapStmt = db.prepare(`INSERT INTO score_snapshots (product_id, product_title, score, issues_count, snapshot_date, store_domain, category) VALUES (?, ?, ?, ?, ?, ?, ?)`);
+      db.transaction((snaps) => {
+        for (const snap of snaps) snapStmt.run(snap.product_id, snap.product_title, snap.score, snap.issues_count || 0, date, storeDomain, snap.category || 'general');
+      })(scored);
+
+      try {
+        const salesData = await fetchSalesData(storeDomain, accessToken);
+        const salesStmt = db.prepare(`INSERT INTO product_sales (product_id, product_title, revenue, orders_count, period_start, period_end, store_domain) VALUES (?, ?, ?, ?, ?, ?, ?)`);
+        db.transaction((items) => {
+          for (const item of items) salesStmt.run(item.product_id, item.product_title, item.revenue, item.orders_count, item.period_start, item.period_end, item.store_domain);
+        })(salesData);
+      } catch (salesErr) {
+        console.warn('Sales sync skipped (token may lack read_orders scope):', salesErr.message);
+      }
+      console.log(`Background sync complete for ${storeDomain}`);
+    } catch (e) {
+      console.error('Background sync failed:', e.message);
+    }
+  })();
 }
 
 function buildSystemPrompt() {
@@ -248,7 +380,9 @@ app.get('/api/health', (req, res) => {
     status: "ok",
     timestamp: new Date().toISOString(),
     endpoints: [
-      "POST /api/connect-store",
+      "POST /api/auth/connect",
+      "GET /api/auth/session",
+      "POST /api/auth/disconnect",
       "POST /api/live-audit",
       "POST /api/live-simulate",
       "GET /api/audit",
@@ -258,10 +392,120 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// GET /api/audit — fetch live store data from Shopify
-app.get('/api/audit', async (req, res) => {
+// POST /api/auth/connect — connect Shopify store and save credentials in session
+app.post('/api/auth/connect', async (req, res) => {
+  const { store_domain, client_id, client_secret } = req.body;
+  const errors = {};
+  const storeDomain = normalizeStoreDomain(store_domain);
+  const clientId = (client_id || '').trim();
+  const clientSecret = (client_secret || '').trim();
+
+  if (!storeDomain || !storeDomain.endsWith('.myshopify.com')) errors.store_domain = "Store URL must be a .myshopify.com domain.";
+  if (!clientId) errors.client_id = "Client ID is required.";
+  if (!clientSecret) errors.client_secret = "Client Secret is required.";
+  if (Object.keys(errors).length > 0) return res.status(400).json({ errors });
+
   try {
-    const storeData = await getStoreData();
+    const { accessToken, shop } = await resolveAccessToken(storeDomain, clientId, clientSecret);
+    const scopeStatus = await checkScopeStatus(storeDomain, accessToken);
+
+    if (scopeStatus.missing_required.length > 0) {
+      return res.status(403).json({
+        error: "missing_scopes",
+        missing: scopeStatus.missing_required,
+        message: "Your app is missing required API permissions."
+      });
+    }
+
+    req.session.store = {
+      domain: storeDomain,
+      client_id: clientId,
+      client_secret: clientSecret,
+      access_token: accessToken,
+      shop_name: shop.name,
+      shop_email: shop.email,
+      plan_name: shop.plan_name,
+      scope_status: scopeStatus,
+      connected_at: new Date().toISOString()
+    };
+
+    startBackgroundSync(storeDomain, accessToken);
+
+    return res.json({
+      success: true,
+      shop: {
+        name: shop.name,
+        domain: storeDomain,
+        plan_name: shop.plan_name
+      },
+      scope_status: scopeStatus,
+      warning: scopeStatus.has_write_products ? null : "Limited access: write_products scope is missing."
+    });
+  } catch (err) {
+    const status = err.response?.status;
+    if (status === 401) {
+      return res.status(401).json({ error: "Invalid access token. Please use the Admin API access token (starts with shpat_) from the API credentials tab, not the API secret key." });
+    }
+    if (status === 403) {
+      return res.status(403).json({ error: "Connected but missing required API scopes. Make sure your app has read_products and write_products access." });
+    }
+    if (status === 404) {
+      return res.status(400).json({ error: "Store not found. Double-check your store URL (e.g. yourstore.myshopify.com)." });
+    }
+    console.error('POST /api/auth/connect error:', err.message);
+    return res.status(400).json({ error: "Unable to connect to Shopify. Please check your store URL and credentials." });
+  }
+});
+
+// GET /api/auth/session — current Shopify session state
+app.get('/api/auth/session', (req, res) => {
+  if (!req.session.store) return res.json({ connected: false });
+
+  const store = req.session.store;
+  res.json({
+    connected: true,
+    shop: {
+      name: store.shop_name,
+      domain: store.domain,
+      plan_name: store.plan_name,
+      connected_at: store.connected_at
+    },
+    scope_status: store.scope_status,
+    has_write_access: store.scope_status?.has_write_products === true
+  });
+});
+
+// POST /api/auth/disconnect — destroy Shopify session
+app.post('/api/auth/disconnect', (req, res) => {
+  req.session.destroy(() => {
+    res.json({ success: true });
+  });
+});
+
+// GET /api/audit — fetch live store data from Shopify
+app.get('/api/audit', requireAuth, async (req, res) => {
+  try {
+    const { scored } = await fetchAndScoreProducts(req.storeSession.domain, req.storeSession.access_token);
+    const storeData = {
+      store_name: req.storeSession.domain,
+      product_count: scored.length,
+      products: scored.map(p => ({
+        id: p.product_id,
+        title: p.product_title,
+        name: p.product_title,
+        score: p.score,
+        issues: p.issues,
+        issues_count: p.issues_count,
+        category: p.category,
+        category_confidence: p.category_confidence,
+        matched_signals: p.matched_signals,
+        criteria_results: p.criteria_results,
+        status: p.score >= 70 ? 'optimized' : p.score >= 40 ? 'needs-work' : 'critical',
+        price: p.price,
+        image: p.image,
+        tags: p.tags
+      })),
+    };
     res.json(storeData);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -269,13 +513,13 @@ app.get('/api/audit', async (req, res) => {
 });
 
 // POST /api/simulate — run a single query against the full store (uses Groq)
-app.post('/api/simulate', async (req, res) => {
+app.post('/api/simulate', requireAuth, async (req, res) => {
   try {
     const { query } = req.body;
     if (!query || typeof query !== 'string' || query.trim() === '') {
       return res.status(400).json({ error: 'query field is required' });
     }
-    const products = await loadProducts();
+    const products = await loadSessionProducts(req.storeSession.domain, req.storeSession.access_token);
     const result = await callGroq(products, query.trim());
     res.json(result);
   } catch (err) {
@@ -289,9 +533,9 @@ app.post('/api/simulate', async (req, res) => {
 
 // POST /api/rerun — real counterfactual engine (no mocked data)
 // Accepts: { product_id, query, fixes[] } or falls back to p7 demo
-app.post('/api/rerun', async (req, res) => {
+app.post('/api/rerun', requireAuth, async (req, res) => {
   try {
-    const products = await loadProducts();
+    const products = await loadSessionProducts(req.storeSession.domain, req.storeSession.access_token);
     const { product_id, query, fixes } = req.body;
 
     // Resolve target product
@@ -332,100 +576,13 @@ app.post('/api/rerun', async (req, res) => {
 // ROUTES — new Shopify live endpoints
 // ──────────────────────────────────────────────
 
-// POST /api/connect-store — validate credentials and return product preview
-app.post('/api/connect-store', async (req, res) => {
-  try {
-    const { domain } = req.body;
-
-    if (!domain) {
-      return res.status(400).json({ error: "domain is required" });
-    }
-
-    const accessToken = await getAccessToken();
-    const products = await fetchShopifyProducts(domain, accessToken);
-
-    // Extract cleaned domain (same logic as shopify.js)
-    const cleanedDomain = domain
-      .replace(/^https?:\/\//, "")
-      .replace(/\/+$/, "")
-      .trim();
-
-    // Token is managed server-side, so write access is always available
-    const hasWriteAccess = true;
-
-    // Map to lightweight preview — not the full product object
-    const preview = products.map(p => ({
-      id: p.id,
-      name: p.name,
-      price: p.price,
-      has_description: !!(p.description && p.description.length > 10),
-      has_return_policy: !!p.return_policy,
-      has_shipping: !!p.shipping,
-      has_ingredients: !!p.ingredients,
-      is_vegan: p.is_vegan,
-      tag_count: p.tags ? p.tags.length : 0
-    }));
-
-    // Fire off async background sync for the new database features
-    // We do not await this, so the frontend UI connects instantly.
-    const { fetchAndScoreProducts, fetchSalesData, today } = require('./shopifyDataService');
-    const db = require('./db');
-    (async () => {
-      try {
-        const bgToken = await getAccessToken();
-        const { scored } = await fetchAndScoreProducts(domain, bgToken);
-        const date = today();
-        const snapStmt = db.prepare(`INSERT INTO score_snapshots (product_id, product_title, score, issues_count, snapshot_date, store_domain, category) VALUES (?, ?, ?, ?, ?, ?, ?)`);
-        db.transaction((snaps) => {
-          for (const snap of snaps) snapStmt.run(snap.product_id, snap.product_title, snap.score, snap.issues_count || 0, date, cleanedDomain, snap.category || 'general');
-        })(scored);
-
-        try {
-          const salesData = await fetchSalesData(domain, bgToken);
-          const salesStmt = db.prepare(`INSERT INTO product_sales (product_id, product_title, revenue, orders_count, period_start, period_end, store_domain) VALUES (?, ?, ?, ?, ?, ?, ?)`);
-          db.transaction((items) => {
-            for (const item of items) salesStmt.run(item.product_id, item.product_title, item.revenue, item.orders_count, item.period_start, item.period_end, item.store_domain);
-          })(salesData);
-        } catch (salesErr) {
-          console.warn('Sales sync skipped (token may lack read_orders scope):', salesErr.message);
-        }
-        console.log(`Background sync complete for ${cleanedDomain}`);
-      } catch (e) {
-        console.error('Background sync failed:', e.message);
-      }
-    })();
-
-    return res.json({
-      success: true,
-      store: {
-        domain: cleanedDomain,
-        product_count: products.length,
-        products: preview,
-        has_write_access: hasWriteAccess
-      }
-    });
-  } catch (err) {
-    console.error('POST /api/connect-store error:', err.message);
-    return res.status(400).json({ error: err.message });
-  }
-});
+// POST /api/connect-store — legacy route removed in favor of /api/auth/connect
 
 // POST /api/live-audit — fetch live products and run full 7-query AI audit
-app.post('/api/live-audit', async (req, res) => {
+app.post('/api/live-audit', requireAuth, async (req, res) => {
   try {
-    const { domain } = req.body;
-
-    if (!domain) {
-      return res.status(400).json({ error: "domain is required" });
-    }
-
-    const accessToken = await getAccessToken();
-    const products = await fetchShopifyProducts(domain, accessToken);
-
-    const cleanedDomain = domain
-      .replace(/^https?:\/\//, "")
-      .replace(/\/+$/, "")
-      .trim();
+    const cleanedDomain = req.storeSession.domain;
+    const products = await fetchShopifyProducts(cleanedDomain, req.storeSession.access_token);
 
     console.log(`\n🚀 Running live audit for ${cleanedDomain} — ${products.length} products`);
 
@@ -540,21 +697,16 @@ app.post('/api/live-audit', async (req, res) => {
 });
 
 // POST /api/live-simulate — run a single query against live Shopify products
-app.post('/api/live-simulate', async (req, res) => {
+app.post('/api/live-simulate', requireAuth, async (req, res) => {
   try {
-    const { domain, query } = req.body;
+    const { query } = req.body;
 
-    if (!domain || !query) {
-      return res.status(400).json({ error: "domain and query are required" });
+    if (!query) {
+      return res.status(400).json({ error: "query is required" });
     }
 
-    const accessToken = await getAccessToken();
-    const products = await fetchShopifyProducts(domain, accessToken);
-
-    const cleanedDomain = domain
-      .replace(/^https?:\/\//, "")
-      .replace(/\/+$/, "")
-      .trim();
+    const cleanedDomain = req.storeSession.domain;
+    const products = await fetchShopifyProducts(cleanedDomain, req.storeSession.access_token);
 
     console.log(`\n🔍 Live simulate for ${cleanedDomain} — query: "${query}"`);
 
@@ -609,17 +761,16 @@ async function shopifyRequest(method, url, accessToken, data) {
 // ──────────────────────────────────────────────
 // PUT /api/products/apply-optimization
 // ──────────────────────────────────────────────
-app.put('/api/products/apply-optimization', async (req, res) => {
+app.put('/api/products/apply-optimization', requireAuth, async (req, res) => {
   try {
-    const { store_domain, product_id, updates } = req.body;
+    const { product_id, updates } = req.body;
 
-    if (!store_domain || !product_id || !updates) {
-      return res.status(400).json({ error: 'store_domain, product_id, and updates are required' });
+    if (!product_id || !updates) {
+      return res.status(400).json({ error: 'product_id and updates are required' });
     }
 
-    const access_token = await getAccessToken();
-
-    const cleanDomain = store_domain.replace(/^https?:\/\//, '').replace(/\/+$/, '').trim();
+    const access_token = req.storeSession.access_token;
+    const cleanDomain = req.storeSession.domain;
 
     // Fetch current product to get old score + title + old values for revert
     let currentProduct;
@@ -752,9 +903,9 @@ app.put('/api/products/apply-optimization', async (req, res) => {
 // ──────────────────────────────────────────────
 // GET /api/products/optimization-history
 // ──────────────────────────────────────────────
-app.get('/api/products/optimization-history', (req, res) => {
-  const { store, product_id } = req.query;
-  if (!store) return res.status(400).json({ error: 'store query param is required' });
+app.get('/api/products/optimization-history', requireAuth, (req, res) => {
+  const { product_id } = req.query;
+  const store = req.storeSession.domain;
 
   try {
     let rows;
@@ -781,17 +932,16 @@ app.get('/api/products/optimization-history', (req, res) => {
 // ──────────────────────────────────────────────
 // POST /api/products/revert
 // ──────────────────────────────────────────────
-app.post('/api/products/revert', async (req, res) => {
+app.post('/api/products/revert', requireAuth, async (req, res) => {
   try {
-    const { store_domain, product_id, history_id } = req.body;
+    const { product_id, history_id } = req.body;
 
-    if (!store_domain || !product_id || !history_id) {
-      return res.status(400).json({ error: 'store_domain, product_id, and history_id are required' });
+    if (!product_id || !history_id) {
+      return res.status(400).json({ error: 'product_id and history_id are required' });
     }
 
-    const access_token = await getAccessToken();
-
-    const cleanDomain = store_domain.replace(/^https?:\/\//, '').replace(/\/+$/, '').trim();
+    const access_token = req.storeSession.access_token;
+    const cleanDomain = req.storeSession.domain;
 
     // Fetch the history row
     const historyRow = db.prepare(`SELECT * FROM optimization_history WHERE id = ?`).get(history_id);
@@ -914,7 +1064,9 @@ app.listen(PORT, () => {
   console.log('   GET  /api/audit');
   console.log('   POST /api/simulate');
   console.log('   POST /api/rerun');
-  console.log('   POST /api/connect-store');
+  console.log('   POST /api/auth/connect');
+  console.log('   GET  /api/auth/session');
+  console.log('   POST /api/auth/disconnect');
   console.log('   POST /api/live-audit');
   console.log('   POST /api/live-simulate');
   console.log('   PUT  /api/products/apply-optimization');

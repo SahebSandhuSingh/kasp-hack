@@ -135,7 +135,7 @@ export default function Dashboard({ setView, storeData }) {
 
   useEffect(() => {
     setLoading(true)
-    fetch('/api/audit')
+    fetch('/api/audit', { credentials: 'include' })
       .then(r => r.ok ? r.json() : Promise.reject(new Error('Failed to fetch audit data')))
       .then(data => {
         setProducts(data.products || [])
@@ -146,7 +146,7 @@ export default function Dashboard({ setView, storeData }) {
 
   useEffect(() => {
     if (!storeData?.domain) return
-    fetch(`/api/products/optimization-history?store=${storeData.domain}`)
+    fetch('/api/products/optimization-history', { credentials: 'include' })
       .then(r => r.ok ? r.json() : [])
       .then(data => setOptHistory(Array.isArray(data) ? data : []))
       .catch(() => setOptHistory([]))
@@ -224,6 +224,14 @@ export default function Dashboard({ setView, storeData }) {
 
   return (
     <div className="space-y-6">
+
+      {/* Page header */}
+      {storeData?.hasWriteAccess === false && (
+        <div className="bg-shopify-warning-light border border-shopify-warning rounded-card px-4 py-3 flex items-center justify-between">
+          <p className="text-sm text-shopify-warning-text">⚠️ Limited access: Can't apply optimizations directly. Enable write_products scope to unlock one-click apply.</p>
+          <button onClick={() => alert('Open Shopify Admin → Settings → Apps → Develop apps → API credentials → Configure Admin API scopes, enable write_products, save, then reconnect.')} className="text-xs font-medium text-shopify-warning-text underline">Fix this →</button>
+        </div>
+      )}
 
       {/* Page header */}
       <div className="flex items-center justify-between">

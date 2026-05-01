@@ -54,6 +54,7 @@ const NAV_ITEMS = [
 
 export default function Shell({ view, setView, storeData, onDisconnect, children }) {
   const [dropdownOpen, setDropdownOpen] = useState(false)
+  const [confirmOpen, setConfirmOpen] = useState(false)
   const dropdownRef = useRef(null)
 
   // Close dropdown on outside click
@@ -68,6 +69,7 @@ export default function Shell({ view, setView, storeData, onDisconnect, children
   }, [])
 
   const storeName = storeData?.domain || 'Not connected'
+  const scopeStatus = storeData?.scopeStatus || {}
 
   return (
     <div className="min-h-screen bg-shopify-bg font-sans">
@@ -121,19 +123,20 @@ export default function Shell({ view, setView, storeData, onDisconnect, children
 
             {/* Dropdown */}
             {dropdownOpen && (
-              <div className="absolute right-0 top-full mt-1.5 w-56 bg-white rounded-card shadow-card border border-shopify-border overflow-hidden z-40 fade-up">
+              <div className="absolute right-0 top-full mt-1.5 w-64 bg-white rounded-card shadow-card border border-shopify-border overflow-hidden z-40 fade-up">
                 <div className="px-4 py-3 border-b border-shopify-border">
                   <p className="text-xs font-semibold text-shopify-text truncate">{storeName}</p>
-                  {storeData?.productCount != null && (
-                    <p className="text-xs text-shopify-secondary mt-0.5">
-                      {storeData.productCount} products synced
-                    </p>
-                  )}
+                  <p className="text-xs text-shopify-secondary mt-0.5">Connected · {storeData?.planName || 'Shopify'}</p>
+                </div>
+                <div className="px-4 py-3 border-b border-shopify-border space-y-2">
+                  <p className="text-xs text-shopify-secondary">⚡ write_products: {scopeStatus.has_write_products ? '✓ Active' : '✗ Missing'}</p>
+                  <p className="text-xs text-shopify-secondary">📦 read_products: {scopeStatus.has_read_products ? '✓ Active' : '✗ Missing'}</p>
+                  <p className="text-xs text-shopify-secondary">📊 read_orders: {scopeStatus.has_read_orders ? '✓ Active' : '✗ Missing'}</p>
                 </div>
                 <button
                   onClick={() => {
                     setDropdownOpen(false)
-                    onDisconnect()
+                    setConfirmOpen(true)
                   }}
                   className="w-full text-left px-4 py-2.5 text-sm text-shopify-critical hover:bg-shopify-critical-light transition-colors flex items-center gap-2"
                 >
@@ -145,6 +148,25 @@ export default function Shell({ view, setView, storeData, onDisconnect, children
           </div>
         </div>
       </header>
+
+      {confirmOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setConfirmOpen(false)}>
+          <div className="bg-white rounded-card shadow-card w-full max-w-sm mx-4 fade-up" onClick={e => e.stopPropagation()}>
+            <div className="px-6 py-5 border-b border-shopify-border">
+              <h2 className="text-base font-semibold text-shopify-text">Disconnect {storeName}?</h2>
+              <p className="text-sm text-shopify-secondary mt-1">Your optimization history will be preserved.</p>
+            </div>
+            <div className="px-6 py-4 flex items-center justify-end gap-3">
+              <button onClick={() => setConfirmOpen(false)} className="text-sm font-medium text-shopify-secondary border border-shopify-border rounded-btn px-4 py-2 hover:bg-shopify-bg transition-colors">
+                Cancel
+              </button>
+              <button onClick={() => { setConfirmOpen(false); onDisconnect() }} className="bg-shopify-critical hover:opacity-90 text-white text-sm font-medium px-4 py-2 rounded-btn transition-colors">
+                Disconnect
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Page content */}
       <main className="max-w-7xl mx-auto px-6 py-8">
