@@ -1,5 +1,11 @@
 import { useState } from 'react'
-import { PRODUCTS, SIMULATE_QUERIES } from '../mockData'
+
+const SIMULATE_QUERIES = [
+  'best product with free returns',
+  'affordable product under ₹500',
+  'product with good reviews and fast shipping',
+  'premium product with detailed information',
+]
 
 // Deterministic scoring — assigns match score based on product data quality
 function scoreProductForQuery(product, query) {
@@ -59,7 +65,7 @@ function MatchScoreBar({ score }) {
   )
 }
 
-export default function Simulate() {
+export default function Simulate({ products = [] }) {
   const [query, setQuery] = useState('')
   const [results, setResults] = useState(null)
   const [loading, setLoading] = useState(false)
@@ -73,7 +79,17 @@ export default function Simulate() {
     // Simulate API delay
     await new Promise(r => setTimeout(r, 900))
 
-    const scored = PRODUCTS.map(p => ({
+    const normalized = products.map(p => ({
+      ...p,
+      name: p.title || p.name || 'Untitled',
+      description: p.description || '',
+      returnPolicy: p.return_policy || null,
+      shipping: p.shipping || null,
+      tags: Array.isArray(p.tags) ? p.tags : (p.tags ? p.tags.split(',').map(t => t.trim()) : []),
+      category: p.category || 'Uncategorized',
+      price: typeof p.price === 'number' ? `₹${p.price}` : (p.price || '₹0'),
+    }))
+    const scored = normalized.map(p => ({
       ...p,
       ...scoreProductForQuery(p, testQuery),
     })).sort((a, b) => b.score - a.score)

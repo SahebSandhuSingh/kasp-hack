@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Shell from './components/Shell.jsx'
 import ConnectStore from './components/ConnectStore.jsx'
 import Dashboard from './components/Dashboard.jsx'
@@ -11,10 +11,23 @@ export default function App() {
   const [view, setView] = useState('dashboard')
   const [storeData, setStoreData] = useState(null) // null = not connected
   const [selectedProduct, setSelectedProduct] = useState(null)
+  const [products, setProducts] = useState([])
+
+  useEffect(() => {
+    fetch('/api/audit')
+      .then(r => r.ok ? r.json() : { products: [] })
+      .then(data => setProducts(data.products || []))
+      .catch(() => setProducts([]))
+  }, [])
 
   // Called when ConnectStore succeeds
   const handleConnected = (data) => {
     setStoreData(data)
+    setView('dashboard')
+  }
+
+  // Called when scope warning is dismissed in read-only mode
+  const handleContinueReadOnly = () => {
     setView('dashboard')
   }
 
@@ -33,13 +46,13 @@ export default function App() {
   const renderView = () => {
     switch (view) {
       case 'dashboard':
-        return <Dashboard setView={setView} setSelectedProduct={setSelectedProduct} />
+        return <Dashboard setView={setView} setSelectedProduct={setSelectedProduct} storeData={storeData} />
       case 'products':
-        return <ProductTable setView={setView} setSelectedProduct={setSelectedProduct} />
+        return <ProductTable setView={setView} setSelectedProduct={setSelectedProduct} products={products} />
       case 'beforeafter':
-        return <BeforeAfter selectedProduct={selectedProduct} />
+        return <BeforeAfter selectedProduct={selectedProduct} storeData={storeData} setView={setView} products={products} />
       case 'simulate':
-        return <Simulate />
+        return <Simulate products={products} />
       case 'analytics':
         return <Analytics storeData={storeData} setView={setView} />
       default:

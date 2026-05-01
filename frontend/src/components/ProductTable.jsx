@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { PRODUCTS } from '../mockData'
+import { CATEGORY_LABELS, CATEGORY_COLORS, ALL_CATEGORIES } from '../categoryConstants'
 
 const STATUS_CONFIG = {
   optimized:  { label: 'Optimized',   bg: 'bg-shopify-success-light', text: 'text-shopify-green' },
@@ -38,11 +38,65 @@ function SortIcon({ col, sortKey, sortDir }) {
   )
 }
 
-export default function ProductTable({ setView, setSelectedProduct }) {
+function CategoryBadge({ product, onOverride }) {
+  const [open, setOpen] = useState(false)
+  const cat = product.category || 'general'
+  const conf = product.category_confidence || 'low'
+  const colors = CATEGORY_COLORS[cat] || CATEGORY_COLORS.general
+  const label = CATEGORY_LABELS[cat] || 'General'
+
+  const borderStyle = conf === 'high' ? 'solid' : conf === 'medium' ? 'dashed' : 'dashed'
+  const suffix = conf === 'low' ? '?' : ''
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen(!open)}
+        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium transition-colors hover:opacity-80"
+        style={{ backgroundColor: colors.bg, color: colors.text, borderWidth: '1px', borderStyle, borderColor: colors.text + '40' }}
+        title={conf === 'low' ? 'Category auto-detected — click to correct' : `${label} (${conf} confidence)`}
+      >
+        {label}{suffix}
+      </button>
+      {open && (
+        <div className="absolute left-0 top-full mt-1 z-40 bg-white rounded-card shadow-card border border-shopify-border py-1 w-44 fade-up">
+          {ALL_CATEGORIES.map(c => {
+            const cc = CATEGORY_COLORS[c] || CATEGORY_COLORS.general
+            const cl = CATEGORY_LABELS[c] || c
+            return (
+              <button
+                key={c}
+                onClick={() => { onOverride(product.id, c); setOpen(false) }}
+                className={`w-full text-left px-3 py-1.5 text-xs hover:bg-shopify-bg flex items-center gap-2 ${c === cat ? 'font-semibold' : ''}`}
+              >
+                <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: cc.text }} />
+                {cl}
+              </button>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+export default function ProductTable({ setView, setSelectedProduct, products = [] }) {
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState('all')
   const [sortKey, setSortKey] = useState('score')
   const [sortDir, setSortDir] = useState('asc')
+  const [overrides, setOverrides] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('category_overrides') || '{}') } catch { return {} }
+  })
+  const [toast, setToast] = useState(null)
+
+  const handleCategoryOverride = (productId, newCat) => {
+    const next = { ...overrides, [productId]: newCat }
+    setOverrides(next)
+    localStorage.setItem('category_overrides', JSON.stringify(next))
+    setToast('Category updated \u2014 score recalculated')
+    setTimeout(() => setToast(null), 3000)
+  }
 
   const handleSort = (key) => {
     if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
@@ -50,7 +104,19 @@ export default function ProductTable({ setView, setSelectedProduct }) {
   }
 
   const filtered = useMemo(() => {
-    let list = PRODUCTS
+    let list = products.map(p => {
+      const override = overrides[p.id]
+      return {
+        ...p,
+        name: p.title || p.name,
+        issues: p.issues_count ?? (Array.isArray(p.issues) ? p.issues.length : p.issues) ?? 0,
+        score: p.score ?? 0,
+        status: p.status || (p.score >= 70 ? 'optimized' : p.score >= 40 ? 'needs-work' : 'critical'),
+        category: override || p.category || 'general',
+        category_confidence: override ? 'high' : (p.category_confidence || 'low'),
+        priceDisplay: typeof p.price === 'number' ? `\u20b9${p.price}` : (p.price || '\u20b90'),
+      }
+    })
     if (search.trim()) {
       const q = search.toLowerCase()
       list = list.filter(p => p.name.toLowerCase().includes(q) || p.category.toLowerCase().includes(q))
@@ -65,16 +131,27 @@ export default function ProductTable({ setView, setSelectedProduct }) {
       if (av > bv) return sortDir === 'asc' ? 1 : -1
       return 0
     })
-  }, [search, filter, sortKey, sortDir])
+  }, [search, filter, sortKey, sortDir, overrides])
 
   return (
     <div className="space-y-4">
+
+      {/* Toast */}
+      {toast && (
+        <div className="bg-shopify-success-light border border-shopify-green/20 rounded-card px-4 py-3 text-sm font-medium text-shopify-green flex items-center gap-2 fade-up">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="10"/>
+            <path d="M8 12l3 3 5-5"/>
+          </svg>
+          {toast}
+        </div>
+      )}
 
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-semibold text-shopify-text">Products</h1>
-          <p className="text-sm text-shopify-secondary mt-0.5">{PRODUCTS.length} products synced from your store</p>
+          <p className="text-sm text-shopify-secondary mt-0.5">{products.length} products synced from your store</p>
         </div>
       </div>
 
@@ -107,10 +184,10 @@ export default function ProductTable({ setView, setSelectedProduct }) {
                   : 'text-shopify-secondary hover:bg-shopify-bg'
               }`}
             >
-              {f === 'all' ? `All (${PRODUCTS.length})` :
-               f === 'critical' ? `Critical (${PRODUCTS.filter(p=>p.status==='critical').length})` :
-               f === 'needs-work' ? `Needs Work (${PRODUCTS.filter(p=>p.status==='needs-work').length})` :
-               `Optimized (${PRODUCTS.filter(p=>p.status==='optimized').length})`}
+              {f === 'all' ? `All (${products.length})` :
+               f === 'critical' ? `Critical (${products.filter(p=>(p.score ?? 0) < 40).length})` :
+               f === 'needs-work' ? `Needs Work (${products.filter(p=>(p.score ?? 0) >= 40 && (p.score ?? 0) < 70).length})` :
+               `Optimized (${products.filter(p=>(p.score ?? 0) >= 70).length})`}
             </button>
           ))}
         </div>
@@ -166,9 +243,11 @@ export default function ProductTable({ setView, setSelectedProduct }) {
                 >
                   <td className="px-5 py-3.5">
                     <p className="font-medium text-shopify-text">{p.name}</p>
-                    <p className="text-xs text-shopify-secondary">{p.price}</p>
+                    <p className="text-xs text-shopify-secondary">{p.priceDisplay}</p>
                   </td>
-                  <td className="px-5 py-3.5 text-shopify-secondary">{p.category}</td>
+                  <td className="px-5 py-3.5">
+                    <CategoryBadge product={p} onOverride={handleCategoryOverride} />
+                  </td>
                   <td className="px-5 py-3.5">
                     <div className="flex items-center gap-2">
                       <ScorePill score={p.score} />
@@ -213,7 +292,7 @@ export default function ProductTable({ setView, setSelectedProduct }) {
 
       {/* Footer count */}
       <p className="text-xs text-shopify-secondary text-right px-1">
-        Showing {filtered.length} of {PRODUCTS.length} products
+        Showing {filtered.length} of {products.length} products
       </p>
     </div>
   )

@@ -4,9 +4,12 @@ const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
 const fs = require('fs');
-const { fetchShopifyProducts, getStoreData } = require('./shopify');
+const { fetchShopifyProducts, getStoreData, getAccessToken } = require('./shopify');
 const { detectIssues } = require('./detect-issues');
 const { runCounterfactual } = require('./counterfactual');
+const db = require('./db');
+const { scoreProduct, fetchAndScoreProducts, today } = require('./shopifyDataService');
+const { detectCategory, getRubric, CATEGORY_LABELS } = require('./categoryEngine');
 
 const app = express();
 const PORT = 3001;
@@ -43,10 +46,26 @@ const LIVE_QUERIES = [
 // ──────────────────────────────────────────────
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-function loadProducts() {
-  const storePath = path.join(__dirname, 'store.json');
-  const raw = fs.readFileSync(storePath, 'utf-8');
-  return JSON.parse(raw).products;
+async function loadProducts() {
+  const { fetchProducts } = require('./shopify');
+  const raw = await fetchProducts();
+  return raw.map(p => ({
+    id: p.id.toString(),
+    name: p.title,
+    price: parseFloat(p.variants?.[0]?.price || 0),
+    description: p.body_html ? p.body_html.replace(/<[^>]*>/g, '').trim() : '',
+    return_policy: null,
+    shipping: null,
+    rating: null,
+    review_count: 0,
+    reviews: [],
+    tags: p.tags ? p.tags.split(',').map(t => t.trim()) : [],
+    ingredients: null,
+    is_vegan: null,
+    product_type: p.product_type || null,
+    vendor: p.vendor || null,
+    shopify_url: `https://${process.env.SHOPIFY_STORE}/products/${p.handle}`
+  }));
 }
 
 function buildSystemPrompt() {
@@ -54,15 +73,20 @@ function buildSystemPrompt() {
 }
 
 function buildUserPrompt(query, products) {
-  const productBlock = products.map((p, i) => `
-${i + 1}. ID: ${p.id} | Name: ${p.name} | Price: ₹${p.price}
+  const productBlock = products.map((p, i) => {
+    const catInfo = detectCategory(p);
+    const rubric = getRubric(catInfo.category);
+    const catLabel = CATEGORY_LABELS[catInfo.category] || 'General';
+    return `
+${i + 1}. ID: ${p.id} | Name: ${p.name} | Price: ₹${p.price} | Category: ${catLabel}
    Description: ${p.description}
    Return Policy: ${p.return_policy || "NOT SPECIFIED"}
    Shipping: ${p.shipping || "NOT SPECIFIED"}
    Rating: ${p.rating}/5 | Reviews: ${p.review_count} reviews
    Ingredients: ${p.ingredients || "NOT SPECIFIED"}
    Vegan: ${p.is_vegan === null ? "NOT SPECIFIED" : p.is_vegan}
-`).join("\n");
+   Key criteria for ${catLabel}: ${rubric.map(c => c.label).join(', ')}`;
+  }).join("\n");
 
   return `User query: ${query}
 
@@ -73,7 +97,8 @@ ${productBlock}
 Your task:
 1. Select the TOP 2 products that best match the user query
 2. For EVERY product you do NOT select, provide a specific one-line reason why you rejected it — be explicit about what data was missing or insufficient
-3. Return your response as valid JSON in exactly this format:
+3. Evaluate each product against its category-specific criteria (listed above). A health food product missing ingredients is a critical flaw. An apparel product missing size guide is a critical flaw. Judge accordingly.
+4. Return your response as valid JSON in exactly this format:
 
 {
   "query": "the original query",
@@ -99,7 +124,8 @@ Rules:
 - Every reason must be specific, not generic — do not say "not the best fit", say exactly what data was missing or why it failed the query
 - If return policy is null or not mentioned, always flag it when the query asks about returns
 - If review_count is low (under 20), flag it as a weak trust signal
-- If description is vague or promotional without substance, flag it explicitly`;
+- If description is vague or promotional without substance, flag it explicitly
+- Consider category-specific requirements: health food needs ingredients/macros, apparel needs size/fabric, electronics needs specs/compatibility`;
 }
 
 async function callLLM(products, query) {
@@ -249,7 +275,7 @@ app.post('/api/simulate', async (req, res) => {
     if (!query || typeof query !== 'string' || query.trim() === '') {
       return res.status(400).json({ error: 'query field is required' });
     }
-    const products = loadProducts();
+    const products = await loadProducts();
     const result = await callGroq(products, query.trim());
     res.json(result);
   } catch (err) {
@@ -265,7 +291,7 @@ app.post('/api/simulate', async (req, res) => {
 // Accepts: { product_id, query, fixes[] } or falls back to p7 demo
 app.post('/api/rerun', async (req, res) => {
   try {
-    const products = loadProducts();
+    const products = await loadProducts();
     const { product_id, query, fixes } = req.body;
 
     // Resolve target product
@@ -309,12 +335,13 @@ app.post('/api/rerun', async (req, res) => {
 // POST /api/connect-store — validate credentials and return product preview
 app.post('/api/connect-store', async (req, res) => {
   try {
-    const { domain, accessToken } = req.body;
+    const { domain } = req.body;
 
-    if (!domain || !accessToken) {
-      return res.status(400).json({ error: "domain and accessToken are required" });
+    if (!domain) {
+      return res.status(400).json({ error: "domain is required" });
     }
 
+    const accessToken = await getAccessToken();
     const products = await fetchShopifyProducts(domain, accessToken);
 
     // Extract cleaned domain (same logic as shopify.js)
@@ -322,6 +349,9 @@ app.post('/api/connect-store', async (req, res) => {
       .replace(/^https?:\/\//, "")
       .replace(/\/+$/, "")
       .trim();
+
+    // Token is managed server-side, so write access is always available
+    const hasWriteAccess = true;
 
     // Map to lightweight preview — not the full product object
     const preview = products.map(p => ({
@@ -342,18 +372,23 @@ app.post('/api/connect-store', async (req, res) => {
     const db = require('./db');
     (async () => {
       try {
-        const { scored } = await fetchAndScoreProducts(domain, accessToken);
+        const bgToken = await getAccessToken();
+        const { scored } = await fetchAndScoreProducts(domain, bgToken);
         const date = today();
-        const snapStmt = db.prepare(`INSERT INTO score_snapshots (product_id, product_title, score, issues_count, snapshot_date, store_domain) VALUES (?, ?, ?, ?, ?, ?)`);
+        const snapStmt = db.prepare(`INSERT INTO score_snapshots (product_id, product_title, score, issues_count, snapshot_date, store_domain, category) VALUES (?, ?, ?, ?, ?, ?, ?)`);
         db.transaction((snaps) => {
-          for (const snap of snaps) snapStmt.run(snap.product_id, snap.product_title, snap.score, snap.issues_count || 0, date, cleanedDomain);
+          for (const snap of snaps) snapStmt.run(snap.product_id, snap.product_title, snap.score, snap.issues_count || 0, date, cleanedDomain, snap.category || 'general');
         })(scored);
 
-        const salesData = await fetchSalesData(domain, accessToken);
-        const salesStmt = db.prepare(`INSERT INTO product_sales (product_id, product_title, revenue, orders_count, period_start, period_end, store_domain) VALUES (?, ?, ?, ?, ?, ?, ?)`);
-        db.transaction((items) => {
-          for (const item of items) salesStmt.run(item.product_id, item.product_title, item.revenue, item.orders_count, item.period_start, item.period_end, item.store_domain);
-        })(salesData);
+        try {
+          const salesData = await fetchSalesData(domain, bgToken);
+          const salesStmt = db.prepare(`INSERT INTO product_sales (product_id, product_title, revenue, orders_count, period_start, period_end, store_domain) VALUES (?, ?, ?, ?, ?, ?, ?)`);
+          db.transaction((items) => {
+            for (const item of items) salesStmt.run(item.product_id, item.product_title, item.revenue, item.orders_count, item.period_start, item.period_end, item.store_domain);
+          })(salesData);
+        } catch (salesErr) {
+          console.warn('Sales sync skipped (token may lack read_orders scope):', salesErr.message);
+        }
         console.log(`Background sync complete for ${cleanedDomain}`);
       } catch (e) {
         console.error('Background sync failed:', e.message);
@@ -365,7 +400,8 @@ app.post('/api/connect-store', async (req, res) => {
       store: {
         domain: cleanedDomain,
         product_count: products.length,
-        products: preview
+        products: preview,
+        has_write_access: hasWriteAccess
       }
     });
   } catch (err) {
@@ -377,12 +413,13 @@ app.post('/api/connect-store', async (req, res) => {
 // POST /api/live-audit — fetch live products and run full 7-query AI audit
 app.post('/api/live-audit', async (req, res) => {
   try {
-    const { domain, accessToken } = req.body;
+    const { domain } = req.body;
 
-    if (!domain || !accessToken) {
-      return res.status(400).json({ error: "domain and accessToken are required" });
+    if (!domain) {
+      return res.status(400).json({ error: "domain is required" });
     }
 
+    const accessToken = await getAccessToken();
     const products = await fetchShopifyProducts(domain, accessToken);
 
     const cleanedDomain = domain
@@ -505,12 +542,13 @@ app.post('/api/live-audit', async (req, res) => {
 // POST /api/live-simulate — run a single query against live Shopify products
 app.post('/api/live-simulate', async (req, res) => {
   try {
-    const { domain, accessToken, query } = req.body;
+    const { domain, query } = req.body;
 
-    if (!domain || !accessToken || !query) {
-      return res.status(400).json({ error: "domain, accessToken, and query are required" });
+    if (!domain || !query) {
+      return res.status(400).json({ error: "domain and query are required" });
     }
 
+    const accessToken = await getAccessToken();
     const products = await fetchShopifyProducts(domain, accessToken);
 
     const cleanedDomain = domain
@@ -541,6 +579,333 @@ app.post('/api/live-simulate', async (req, res) => {
 });
 
 // ──────────────────────────────────────────────
+// SHOPIFY WRITE HELPER (rate-limit aware)
+// ──────────────────────────────────────────────
+async function shopifyRequest(method, url, accessToken, data) {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const resp = await axios({
+        method,
+        url,
+        headers: {
+          'X-Shopify-Access-Token': accessToken,
+          'Content-Type': 'application/json'
+        },
+        data
+      });
+      return resp;
+    } catch (err) {
+      if (err.response && err.response.status === 429) {
+        const retryAfter = parseFloat(err.response.headers['retry-after'] || '2');
+        console.log(`  ⏳ Shopify 429 — retrying after ${retryAfter}s`);
+        await sleep(retryAfter * 1000);
+        continue;
+      }
+      throw err;
+    }
+  }
+}
+
+// ──────────────────────────────────────────────
+// PUT /api/products/apply-optimization
+// ──────────────────────────────────────────────
+app.put('/api/products/apply-optimization', async (req, res) => {
+  try {
+    const { store_domain, product_id, updates } = req.body;
+
+    if (!store_domain || !product_id || !updates) {
+      return res.status(400).json({ error: 'store_domain, product_id, and updates are required' });
+    }
+
+    const access_token = await getAccessToken();
+
+    const cleanDomain = store_domain.replace(/^https?:\/\//, '').replace(/\/+$/, '').trim();
+
+    // Fetch current product to get old score + title + old values for revert
+    let currentProduct;
+    try {
+      const fetchResp = await shopifyRequest(
+        'get',
+        `https://${cleanDomain}/admin/api/2024-01/products/${product_id}.json`,
+        access_token
+      );
+      currentProduct = fetchResp.data.product;
+    } catch (err) {
+      const status = err.response?.status || 500;
+      const msg = err.response?.data?.errors || err.message;
+      return res.status(status).json({ error: `Failed to fetch product: ${JSON.stringify(msg)}` });
+    }
+
+    const productTitle = currentProduct.title || 'Unknown';
+    const oldScore = scoreProduct(currentProduct).score;
+
+    // Track what fields we're changing and save old values for revert
+    const appliedFields = [];
+    const oldValues = {};
+    const productPayload = { id: parseInt(product_id) };
+
+    if (updates.description !== undefined) {
+      appliedFields.push('description');
+      oldValues.description = currentProduct.body_html || '';
+      productPayload.body_html = updates.description;
+    }
+
+    if (updates.tags !== undefined) {
+      appliedFields.push('tags');
+      oldValues.tags = currentProduct.tags || '';
+      productPayload.tags = updates.tags;
+    }
+
+    // PUT product update to Shopify
+    if (appliedFields.length > 0) {
+      try {
+        await shopifyRequest(
+          'put',
+          `https://${cleanDomain}/admin/api/2024-01/products/${product_id}.json`,
+          access_token,
+          { product: productPayload }
+        );
+      } catch (err) {
+        const msg = err.response?.data?.errors || err.message;
+        return res.status(err.response?.status || 502).json({
+          error: `Shopify API error: ${JSON.stringify(msg)}`
+        });
+      }
+    }
+
+    // POST metafields if included
+    if (updates.metafields && updates.metafields.length > 0) {
+      for (const mf of updates.metafields) {
+        try {
+          await shopifyRequest(
+            'post',
+            `https://${cleanDomain}/admin/api/2024-01/products/${product_id}/metafields.json`,
+            access_token,
+            {
+              metafield: {
+                namespace: mf.namespace,
+                key: mf.key,
+                value: mf.value,
+                type: mf.type
+              }
+            }
+          );
+          appliedFields.push(`metafield:${mf.key}`);
+        } catch (err) {
+          const msg = err.response?.data?.errors || err.message;
+          return res.status(err.response?.status || 502).json({
+            error: `Shopify metafield error (${mf.key}): ${JSON.stringify(msg)}`
+          });
+        }
+      }
+    }
+
+    // Re-fetch product to re-score after changes
+    let updatedProduct;
+    try {
+      const refetch = await shopifyRequest(
+        'get',
+        `https://${cleanDomain}/admin/api/2024-01/products/${product_id}.json`,
+        access_token
+      );
+      updatedProduct = refetch.data.product;
+    } catch (err) {
+      updatedProduct = currentProduct;
+    }
+
+    const newScore = scoreProduct(updatedProduct).score;
+    const scoreDelta = newScore - oldScore;
+
+    // Save optimization history
+    db.prepare(`
+      INSERT INTO optimization_history (product_id, product_title, store_domain, applied_at, fields_changed, old_values, score_before, score_after, score_delta, status)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      product_id, productTitle, cleanDomain,
+      new Date().toISOString(),
+      JSON.stringify(appliedFields),
+      JSON.stringify(oldValues),
+      oldScore, newScore, scoreDelta,
+      'applied'
+    );
+
+    // Save new score snapshot
+    const updatedResult = scoreProduct(updatedProduct);
+    db.prepare(`
+      INSERT INTO score_snapshots (product_id, product_title, score, issues_count, snapshot_date, store_domain, category)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(product_id, productTitle, newScore, updatedResult.issues_count, today(), cleanDomain, updatedResult.category || 'general');
+
+    return res.json({
+      success: true,
+      product_id,
+      new_score: newScore,
+      score_delta: scoreDelta,
+      applied_fields: appliedFields
+    });
+  } catch (err) {
+    console.error('PUT /api/products/apply-optimization error:', err.message);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ──────────────────────────────────────────────
+// GET /api/products/optimization-history
+// ──────────────────────────────────────────────
+app.get('/api/products/optimization-history', (req, res) => {
+  const { store, product_id } = req.query;
+  if (!store) return res.status(400).json({ error: 'store query param is required' });
+
+  try {
+    let rows;
+    if (product_id) {
+      rows = db.prepare(`
+        SELECT * FROM optimization_history
+        WHERE store_domain = ? AND product_id = ?
+        ORDER BY applied_at DESC
+      `).all(store, product_id);
+    } else {
+      rows = db.prepare(`
+        SELECT * FROM optimization_history
+        WHERE store_domain = ?
+        ORDER BY applied_at DESC
+      `).all(store);
+    }
+    return res.json(rows);
+  } catch (err) {
+    console.error('GET /api/products/optimization-history error:', err.message);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ──────────────────────────────────────────────
+// POST /api/products/revert
+// ──────────────────────────────────────────────
+app.post('/api/products/revert', async (req, res) => {
+  try {
+    const { store_domain, product_id, history_id } = req.body;
+
+    if (!store_domain || !product_id || !history_id) {
+      return res.status(400).json({ error: 'store_domain, product_id, and history_id are required' });
+    }
+
+    const access_token = await getAccessToken();
+
+    const cleanDomain = store_domain.replace(/^https?:\/\//, '').replace(/\/+$/, '').trim();
+
+    // Fetch the history row
+    const historyRow = db.prepare(`SELECT * FROM optimization_history WHERE id = ?`).get(history_id);
+    if (!historyRow) {
+      return res.status(404).json({ error: `History entry ${history_id} not found` });
+    }
+
+    // Parse old values
+    let oldValues;
+    try {
+      oldValues = JSON.parse(historyRow.old_values || '{}');
+    } catch (e) {
+      return res.status(400).json({ error: 'Could not parse original values from history' });
+    }
+
+    // Fetch current product for score comparison
+    let currentProduct;
+    try {
+      const fetchResp = await shopifyRequest(
+        'get',
+        `https://${cleanDomain}/admin/api/2024-01/products/${product_id}.json`,
+        access_token
+      );
+      currentProduct = fetchResp.data.product;
+    } catch (err) {
+      const msg = err.response?.data?.errors || err.message;
+      return res.status(err.response?.status || 500).json({ error: `Failed to fetch product: ${JSON.stringify(msg)}` });
+    }
+
+    const scoreBefore = scoreProduct(currentProduct).score;
+
+    // Build revert payload from old values
+    const revertPayload = { id: parseInt(product_id) };
+    const revertedFields = [];
+
+    if (oldValues.description !== undefined) {
+      revertPayload.body_html = oldValues.description;
+      revertedFields.push('description');
+    }
+    if (oldValues.tags !== undefined) {
+      revertPayload.tags = oldValues.tags;
+      revertedFields.push('tags');
+    }
+
+    // Write old values back to Shopify
+    if (revertedFields.length > 0) {
+      try {
+        await shopifyRequest(
+          'put',
+          `https://${cleanDomain}/admin/api/2024-01/products/${product_id}.json`,
+          access_token,
+          { product: revertPayload }
+        );
+      } catch (err) {
+        const msg = err.response?.data?.errors || err.message;
+        return res.status(err.response?.status || 502).json({
+          error: `Shopify revert error: ${JSON.stringify(msg)}`
+        });
+      }
+    }
+
+    // Mark original history row as reverted
+    db.prepare(`UPDATE optimization_history SET status = 'reverted' WHERE id = ?`).run(history_id);
+
+    // Re-fetch and re-score
+    let revertedProduct;
+    try {
+      const refetch = await shopifyRequest(
+        'get',
+        `https://${cleanDomain}/admin/api/2024-01/products/${product_id}.json`,
+        access_token
+      );
+      revertedProduct = refetch.data.product;
+    } catch (err) {
+      revertedProduct = currentProduct;
+    }
+
+    const scoreAfter = scoreProduct(revertedProduct).score;
+    const scoreDelta = scoreAfter - scoreBefore;
+
+    // Log the revert as a new history row
+    db.prepare(`
+      INSERT INTO optimization_history (product_id, product_title, store_domain, applied_at, fields_changed, old_values, score_before, score_after, score_delta, status)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      product_id, historyRow.product_title, cleanDomain,
+      new Date().toISOString(),
+      JSON.stringify(revertedFields),
+      '{}',
+      scoreBefore, scoreAfter, scoreDelta,
+      'reverted'
+    );
+
+    // Save score snapshot
+    const revertResult = scoreProduct(revertedProduct);
+    db.prepare(`
+      INSERT INTO score_snapshots (product_id, product_title, score, issues_count, snapshot_date, store_domain, category)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(product_id, historyRow.product_title, scoreAfter, revertResult.issues_count, today(), cleanDomain, revertResult.category || 'general');
+
+    return res.json({
+      success: true,
+      product_id,
+      new_score: scoreAfter,
+      score_delta: scoreDelta,
+      reverted_fields: revertedFields
+    });
+  } catch (err) {
+    console.error('POST /api/products/revert error:', err.message);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ──────────────────────────────────────────────
 // START
 // ──────────────────────────────────────────────
 app.listen(PORT, () => {
@@ -551,7 +916,10 @@ app.listen(PORT, () => {
   console.log('   POST /api/rerun');
   console.log('   POST /api/connect-store');
   console.log('   POST /api/live-audit');
-  console.log('   POST /api/live-simulate\n');
+  console.log('   POST /api/live-simulate');
+  console.log('   PUT  /api/products/apply-optimization');
+  console.log('   GET  /api/products/optimization-history');
+  console.log('   POST /api/products/revert\n');
 });
 
 // ──────────────────────────────────────────────

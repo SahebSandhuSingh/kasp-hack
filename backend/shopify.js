@@ -177,10 +177,10 @@ async function getAccessToken() {
 async function fetchProducts() {
   const SHOPIFY_STORE = process.env.SHOPIFY_STORE;
   // Use static Admin API token (shpat_ / shpua_) — no OAuth exchange needed for private apps
-  const token = process.env.SHOPIFY_ACCESS_TOKEN;
+  const token = await getAccessToken();
 
-  if (!SHOPIFY_STORE || !token) {
-    throw new Error('SHOPIFY_STORE and SHOPIFY_ACCESS_TOKEN must be set in .env');
+  if (!SHOPIFY_STORE) {
+    throw new Error('SHOPIFY_STORE must be set in .env');
   }
 
   try {
@@ -224,7 +224,23 @@ function normalizeProduct(product) {
 
 async function getStoreData() {
   const rawProducts = await fetchProducts();
-  const normalizedProducts = rawProducts.map(normalizeProduct);
+  const { scoreProduct: catScore } = require('./categoryEngine');
+
+  const normalizedProducts = rawProducts.map(p => {
+    const norm = normalizeProduct(p);
+    const result = catScore(p);
+    return {
+      ...norm,
+      score: result.score,
+      issues: result.issues,
+      issues_count: result.issues_count,
+      category: result.category,
+      category_confidence: result.category_confidence,
+      matched_signals: result.matched_signals,
+      criteria_results: result.criteria_results,
+      status: result.score >= 70 ? 'optimized' : result.score >= 40 ? 'needs-work' : 'critical',
+    };
+  });
   
   const categories = [...new Set(normalizedProducts.map(p => p.category).filter(c => c))];
   
@@ -263,5 +279,6 @@ module.exports = {
   getWordCount,
   fetchProducts,
   normalizeProduct,
-  getStoreData 
+  getStoreData,
+  getAccessToken 
 };

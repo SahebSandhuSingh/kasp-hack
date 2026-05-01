@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { LineChart, Line, ScatterChart, Scatter, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
+import { CATEGORY_LABELS, CATEGORY_COLORS, ALL_CATEGORIES } from '../categoryConstants';
 
 // ─────────────────────────────────────────
 // HELPERS
@@ -29,6 +30,7 @@ export default function Analytics({ storeData, setView }) {
   const [trendView, setTrendView] = useState('store'); // 'store' | 'product'
   const [selectedProduct, setSelectedProduct] = useState('');
   const [productHistory, setProductHistory] = useState([]);
+  const [categoryFilter, setCategoryFilter] = useState('all');
 
   // Load data
   const loadData = async () => {
@@ -67,7 +69,7 @@ export default function Analytics({ storeData, setView }) {
       const res = await fetch('/api/refresh', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ domain: storeData.domain, accessToken: storeData.accessToken })
+        body: JSON.stringify({ domain: storeData.domain })
       });
       if (!res.ok) throw new Error('Refresh failed');
       await loadData();
@@ -117,18 +119,33 @@ export default function Analytics({ storeData, setView }) {
   // TAB 1: TRAFFIC REPORT
   // ─────────────────────────────────────────
   const renderTraffic = () => {
-    const high = trafficReport.filter(p => p.latest_score >= 70);
-    const mod = trafficReport.filter(p => p.latest_score >= 40 && p.latest_score < 70);
-    const risk = trafficReport.filter(p => p.latest_score < 40);
+    const catFiltered = categoryFilter === 'all' ? trafficReport : trafficReport.filter(p => (p.category || 'general') === categoryFilter);
+    const high = catFiltered.filter(p => p.latest_score >= 70);
+    const mod = catFiltered.filter(p => p.latest_score >= 40 && p.latest_score < 70);
+    const risk = catFiltered.filter(p => p.latest_score < 40);
     
     const riskRevenue = risk.reduce((sum, p) => sum + p.revenue, 0);
-    const showWarning = (risk.length / trafficReport.length) > 0.3;
+    const showWarning = catFiltered.length > 0 && (risk.length / catFiltered.length) > 0.3;
+
+    const uniqueCategories = [...new Set(trafficReport.map(p => p.category || 'general'))];
 
     return (
       <div className="space-y-6 fade-up">
-        <div>
-          <h2 className="text-lg font-semibold text-shopify-text">AI Visibility by Product</h2>
-          <p className="text-sm text-shopify-secondary mt-0.5">Products ranked by how likely AI shopping assistants are to recommend them</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-shopify-text">AI Visibility by Product</h2>
+            <p className="text-sm text-shopify-secondary mt-0.5">Products ranked by how likely AI shopping assistants are to recommend them</p>
+          </div>
+          <select
+            value={categoryFilter}
+            onChange={e => setCategoryFilter(e.target.value)}
+            className="px-3 py-1.5 text-sm border border-shopify-border rounded-btn focus:ring-1 focus:ring-shopify-green outline-none"
+          >
+            <option value="all">All Categories</option>
+            {uniqueCategories.map(c => (
+              <option key={c} value={c}>{CATEGORY_LABELS[c] || c}</option>
+            ))}
+          </select>
         </div>
 
         {showWarning && (
@@ -170,10 +187,18 @@ export default function Analytics({ storeData, setView }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-shopify-border">
-              {[...trafficReport].sort((a,b) => b.latest_score - a.latest_score).map((p, i) => (
+              {[...catFiltered].sort((a,b) => b.latest_score - a.latest_score).map((p, i) => (
                 <tr key={p.product_id} className="hover:bg-shopify-bg">
                   <td className="px-5 py-3.5 text-shopify-secondary">{i + 1}</td>
-                  <td className="px-5 py-3.5 font-medium text-shopify-text">{p.product_title}</td>
+                  <td className="px-5 py-3.5">
+                    <p className="font-medium text-shopify-text">{p.product_title}</p>
+                    <span
+                      className="inline-flex items-center px-1.5 py-0 rounded-full text-xs mt-0.5"
+                      style={{ backgroundColor: (CATEGORY_COLORS[p.category] || CATEGORY_COLORS.general).bg, color: (CATEGORY_COLORS[p.category] || CATEGORY_COLORS.general).text }}
+                    >
+                      {CATEGORY_LABELS[p.category] || 'General'}
+                    </span>
+                  </td>
                   <td className="px-5 py-3.5">
                     <div className="flex items-center gap-2">
                       <span className="font-bold w-6">{p.latest_score}</span>

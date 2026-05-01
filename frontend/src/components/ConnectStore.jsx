@@ -2,16 +2,12 @@ import { useState } from 'react'
 
 const STEPS = [
   'Go to your Shopify Admin',
-  'Click Settings → Apps and sales channels',
-  'Click Develop apps → Create an app',
-  'Under API credentials, click Install app',
-  'Copy the Admin API access token',
+  'Find your store URL (e.g. yourstore.myshopify.com)',
+  'Enter it below and click Connect',
 ]
 
 export default function ConnectStore({ onConnected }) {
   const [domain, setDomain] = useState('')
-  const [token, setToken] = useState('')
-  const [showToken, setShowToken] = useState(false)
   const [showHelp, setShowHelp] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
@@ -19,10 +15,9 @@ export default function ConnectStore({ onConnected }) {
   const handleSubmit = async (e) => {
     e.preventDefault()
     const cleanDomain = domain.trim()
-    const cleanToken = token.trim()
 
-    if (!cleanDomain || !cleanToken) {
-      setError('Both store URL and access token are required.')
+    if (!cleanDomain) {
+      setError('Store URL is required.')
       return
     }
 
@@ -33,7 +28,7 @@ export default function ConnectStore({ onConnected }) {
       const res = await fetch('/api/connect-store', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ domain: cleanDomain, accessToken: cleanToken }),
+        body: JSON.stringify({ domain: cleanDomain }),
       })
       const data = await res.json()
 
@@ -44,8 +39,8 @@ export default function ConnectStore({ onConnected }) {
       // Pass store info to parent
       onConnected({
         domain: data.store.domain,
-        accessToken: cleanToken,
         productCount: data.store.product_count,
+        hasWriteAccess: data.store.has_write_access !== false,
       })
     } catch (err) {
       setError(err.message)
@@ -103,43 +98,12 @@ export default function ConnectStore({ onConnected }) {
               </p>
             </div>
 
-            {/* Access Token */}
-            <div>
-              <label htmlFor="access-token" className="block text-sm font-medium text-shopify-text mb-1">
-                Admin API Access Token
-              </label>
-              <div className="relative">
-                <input
-                  id="access-token"
-                  type={showToken ? 'text' : 'password'}
-                  value={token}
-                  onChange={e => setToken(e.target.value)}
-                  placeholder="shpat_xxxxxxxxxxxx"
-                  disabled={loading}
-                  className="w-full px-3 py-2 pr-10 text-sm border border-[#C9CCCF] rounded-btn
-                    focus:outline-none focus:ring-1 focus:ring-shopify-green focus:border-shopify-green
-                    disabled:opacity-50 disabled:bg-shopify-bg font-mono"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowToken(!showToken)}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-shopify-secondary hover:text-shopify-text text-xs"
-                  tabIndex={-1}
-                >
-                  {showToken ? 'Hide' : 'Show'}
-                </button>
+            {/* Error message */}
+            {error && (
+              <div className="bg-shopify-critical-light border border-red-200 rounded-btn px-3 py-2">
+                <p className="text-xs text-shopify-critical font-medium">{error}</p>
               </div>
-              <p className="text-xs text-shopify-secondary mt-1">
-                Found in Shopify Admin → Apps → API credentials
-              </p>
-
-              {/* Error message below token field */}
-              {error && (
-                <div className="mt-2 bg-shopify-critical-light border border-red-200 rounded-btn px-3 py-2">
-                  <p className="text-xs text-shopify-critical font-medium">{error}</p>
-                </div>
-              )}
-            </div>
+            )}
 
             {/* How-to collapsible */}
             <div className="border border-shopify-border rounded-btn overflow-hidden">
@@ -148,7 +112,7 @@ export default function ConnectStore({ onConnected }) {
                 onClick={() => setShowHelp(!showHelp)}
                 className="w-full flex items-center justify-between px-3 py-2.5 text-sm text-shopify-secondary hover:bg-shopify-bg transition-colors"
               >
-                <span className="font-medium">How to get your access token</span>
+                <span className="font-medium">How to find your store URL</span>
                 <svg className={`transition-transform ${showHelp ? 'rotate-180' : ''}`} width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M3 4.5L6 7.5L9 4.5"/>
                 </svg>
@@ -172,7 +136,7 @@ export default function ConnectStore({ onConnected }) {
             {/* Submit */}
             <button
               type="submit"
-              disabled={loading || !domain.trim() || !token.trim()}
+              disabled={loading || !domain.trim()}
               className="w-full bg-shopify-green hover:bg-shopify-green-dark disabled:opacity-50
                 text-white text-sm font-medium py-2.5 rounded-btn transition-colors
                 flex items-center justify-center gap-2"
@@ -194,7 +158,7 @@ export default function ConnectStore({ onConnected }) {
 
         {/* Footer */}
         <p className="text-center text-xs text-shopify-secondary mt-4">
-          Your credentials are stored locally and never shared
+          Tokens are managed securely on the server
         </p>
       </div>
     </div>

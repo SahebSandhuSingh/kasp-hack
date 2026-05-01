@@ -1,5 +1,147 @@
-import { useState } from 'react'
-import { PRODUCTS } from '../mockData'
+import { useState, useEffect, useRef } from 'react'
+import { CATEGORY_LABELS, CATEGORY_COLORS } from '../categoryConstants'
+
+// ──────────────────────────────────────────────
+// CATEGORY-AWARE SUB-COMPONENTS
+// ──────────────────────────────────────────────
+
+function CategoryIssuesPanel({ product }) {
+  const issues = product.issues || []
+  const cat = product.category || 'general'
+  const colors = CATEGORY_COLORS[cat] || CATEGORY_COLORS.general
+  const label = CATEGORY_LABELS[cat] || 'General'
+
+  if (issues.length === 0) {
+    return (
+      <div className="bg-shopify-success-light border border-shopify-green/20 rounded-card px-5 py-4 flex items-center gap-3">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#008060" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="12" r="10"/><path d="M8 12l3 3 5-5"/>
+        </svg>
+        <p className="text-sm font-medium text-shopify-green">No issues found for this {label} product</p>
+      </div>
+    )
+  }
+
+  const critical = issues.filter(i => i.severity === 'critical')
+  const warnings = issues.filter(i => i.severity !== 'critical')
+
+  return (
+    <div className="bg-white rounded-card shadow-card overflow-hidden">
+      <div className="px-5 py-3 border-b border-shopify-border flex items-center gap-2">
+        <span className="w-2 h-2 rounded-full" style={{ backgroundColor: colors.text }} />
+        <span className="text-xs font-semibold uppercase tracking-wide text-shopify-secondary">
+          {label} Issues
+        </span>
+        <span className="text-xs text-shopify-secondary ml-auto">{issues.length} issue{issues.length !== 1 ? 's' : ''}</span>
+      </div>
+      <div className="divide-y divide-shopify-border">
+        {critical.map((issue, i) => (
+          <div key={i} className="px-5 py-3 flex items-start gap-3 bg-shopify-critical-light/30">
+            <span className="shrink-0 mt-0.5 text-shopify-critical text-xs font-bold uppercase">CRITICAL</span>
+            <div>
+              <p className="text-sm font-medium text-shopify-text">{issue.label}</p>
+              <p className="text-xs text-shopify-secondary mt-0.5">{issue.message}</p>
+              <p className="text-xs text-shopify-critical mt-0.5">+{issue.points_available} pts if fixed</p>
+            </div>
+          </div>
+        ))}
+        {warnings.map((issue, i) => (
+          <div key={i} className="px-5 py-3 flex items-start gap-3">
+            <span className="shrink-0 mt-0.5 text-shopify-warning-text text-xs font-bold uppercase">WARNING</span>
+            <div>
+              <p className="text-sm font-medium text-shopify-text">{issue.label}</p>
+              <p className="text-xs text-shopify-secondary mt-0.5">{issue.message}</p>
+              <p className="text-xs text-shopify-warning-text mt-0.5">+{issue.points_available} pts if fixed</p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function ScoreBreakdownBar({ product }) {
+  const cr = product.criteria_results || {}
+  const cat = product.category || 'general'
+  const colors = CATEGORY_COLORS[cat] || CATEGORY_COLORS.general
+  const entries = Object.entries(cr)
+  if (entries.length === 0) return null
+
+  return (
+    <div className="bg-white rounded-card shadow-card p-5">
+      <p className="text-xs font-semibold uppercase tracking-wide text-shopify-secondary mb-3">Score Breakdown</p>
+      <div className="space-y-2">
+        {entries.map(([key, val]) => (
+          <div key={key} className="flex items-center gap-2">
+            <span className="text-xs text-shopify-text w-36 truncate capitalize">{key.replace(/^has_/, '').replace(/_/g, ' ')}</span>
+            <div className="flex-1 h-2 bg-shopify-border rounded-full">
+              <div
+                className="h-2 rounded-full transition-all"
+                style={{ width: `${(val.points / val.max_points) * 100}%`, backgroundColor: val.passed ? colors.text : '#D72C0D' }}
+              />
+            </div>
+            <span className="text-xs font-medium w-12 text-right" style={{ color: val.passed ? colors.text : '#D72C0D' }}>
+              {val.points}/{val.max_points}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function RubricModal({ category, onClose }) {
+  const [rubric, setRubric] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    fetch(`/api/categories/rubric?category=${category}`)
+      .then(r => r.json())
+      .then(data => { setRubric(data); setLoading(false) })
+      .catch(() => setLoading(false))
+  }, [category])
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
+      <div className="bg-white rounded-card shadow-card w-full max-w-md mx-4 fade-up" onClick={e => e.stopPropagation()}>
+        <div className="px-6 py-5 border-b border-shopify-border flex items-center justify-between">
+          <h2 className="text-base font-semibold text-shopify-text">
+            {rubric?.label || 'Category'} Scoring Rubric
+          </h2>
+          <button onClick={onClose} className="text-shopify-secondary hover:text-shopify-text">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
+        <div className="px-6 py-4 max-h-96 overflow-y-auto">
+          {loading ? (
+            <p className="text-sm text-shopify-secondary">Loading...</p>
+          ) : rubric?.criteria ? (
+            <div className="space-y-3">
+              {rubric.criteria.map(c => (
+                <div key={c.key} className="flex items-start gap-3">
+                  <span className="shrink-0 bg-shopify-bg text-shopify-text text-xs font-bold px-2 py-0.5 rounded">{c.points} pts</span>
+                  <div>
+                    <p className="text-sm font-medium text-shopify-text">{c.label}</p>
+                    <p className="text-xs text-shopify-secondary mt-0.5">{c.missing_msg}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-shopify-secondary">No rubric found</p>
+          )}
+        </div>
+        <div className="px-6 py-4 border-t border-shopify-border flex justify-end">
+          <button onClick={onClose} className="text-sm font-medium text-shopify-secondary border border-shopify-border rounded-btn px-4 py-2 hover:bg-shopify-bg">Close</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ──────────────────────────────────────────────
+// SHARED SUB-COMPONENTS
+// ──────────────────────────────────────────────
 
 function DiffView({ oldText, newText }) {
   const oldWords = new Set((oldText || '').split(/\s+/))
@@ -72,7 +214,7 @@ function ScoreUpgrade({ before, after }) {
             <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/>
             <polyline points="17 6 23 6 23 12"/>
           </svg>
-          <span className="text-lg font-bold">+{delta}</span>
+          <span className="text-lg font-bold">{delta >= 0 ? '+' : ''}{delta}</span>
         </div>
         <p className="text-xs text-shopify-secondary">projected improvement</p>
       </div>
@@ -84,14 +226,543 @@ function ScoreUpgrade({ before, after }) {
   )
 }
 
-export default function BeforeAfter({ selectedProduct }) {
-  const product = selectedProduct || PRODUCTS.find(p => p.status === 'critical') || PRODUCTS[0]
-  const [applied, setApplied] = useState(false)
+function Spinner({ size = 16 }) {
+  return (
+    <svg className="animate-spin" width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeOpacity="0.3"/>
+      <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round"/>
+    </svg>
+  )
+}
 
-  const projectedScore = Math.min(95, (isNaN(product.score) ? 0 : product.score) + 40)
+function AnimatedScore({ target }) {
+  const [display, setDisplay] = useState(0)
+  const ref = useRef(null)
+
+  useEffect(() => {
+    const start = 0
+    const end = target
+    const duration = 1200
+    const startTime = performance.now()
+
+    function tick(now) {
+      const elapsed = now - startTime
+      const progress = Math.min(elapsed / duration, 1)
+      const eased = 1 - Math.pow(1 - progress, 3)
+      setDisplay(Math.round(start + (end - start) * eased))
+      if (progress < 1) ref.current = requestAnimationFrame(tick)
+    }
+
+    ref.current = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(ref.current)
+  }, [target])
+
+  return <span>{display}</span>
+}
+
+// ──────────────────────────────────────────────
+// CONFIRMATION MODAL
+// ──────────────────────────────────────────────
+
+function ConfirmModal({ product, changes, onCancel, onConfirm }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onCancel}>
+      <div className="bg-white rounded-card shadow-card w-full max-w-md mx-4 fade-up" onClick={e => e.stopPropagation()}>
+        <div className="px-6 py-5 border-b border-shopify-border">
+          <h2 className="text-base font-semibold text-shopify-text">
+            Apply changes to {product.name}?
+          </h2>
+        </div>
+
+        <div className="px-6 py-4 space-y-2">
+          {changes.map((c, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#008060" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M20 6L9 17l-5-5"/>
+              </svg>
+              <span className="text-sm text-shopify-text">{c}</span>
+            </div>
+          ))}
+        </div>
+
+        <div className="px-6 py-3 bg-shopify-warning-light border-t border-shopify-warning/30 border-b border-b-shopify-border">
+          <p className="text-xs text-shopify-warning-text">
+            This will update your live Shopify store immediately.
+            You can undo this at any time from Optimization History.
+          </p>
+        </div>
+
+        <div className="px-6 py-4 flex items-center justify-end gap-3">
+          <button
+            onClick={onCancel}
+            className="text-sm font-medium text-shopify-secondary border border-shopify-border rounded-btn px-4 py-2 hover:bg-shopify-bg transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            className="bg-shopify-green hover:bg-shopify-green-dark text-white text-sm font-medium px-5 py-2 rounded-btn transition-colors"
+          >
+            Confirm &amp; Apply
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ──────────────────────────────────────────────
+// PROGRESS STEPS
+// ──────────────────────────────────────────────
+
+function ApplyingOverlay({ steps, currentStep }) {
+  return (
+    <div className="bg-white rounded-card shadow-card p-8 max-w-md mx-auto fade-up">
+      <div className="flex items-center gap-3 mb-6">
+        <Spinner size={20} />
+        <p className="text-sm font-semibold text-shopify-text">Applying changes...</p>
+      </div>
+      <div className="space-y-3">
+        {steps.map((step, i) => {
+          const done = i < currentStep
+          const active = i === currentStep
+          return (
+            <div key={i} className="flex items-center gap-3">
+              {done ? (
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#008060" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M20 6L9 17l-5-5"/>
+                </svg>
+              ) : active ? (
+                <Spinner size={16} />
+              ) : (
+                <div className="w-4 h-4 rounded-full border-2 border-shopify-border" />
+              )}
+              <span className={`text-sm ${done ? 'text-shopify-green font-medium' : active ? 'text-shopify-text font-medium' : 'text-shopify-secondary'}`}>
+                {step}
+              </span>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+// ──────────────────────────────────────────────
+// SUCCESS STATE
+// ──────────────────────────────────────────────
+
+function SuccessView({ product, scoreBefore, scoreAfter, appliedFields, shopifyUrl, onOptimizeAnother }) {
+  const delta = scoreAfter - scoreBefore
 
   return (
-    <div className="space-y-5 max-w-4xl">
+    <div className="space-y-5 max-w-lg mx-auto fade-up">
+      <div className="bg-white rounded-card shadow-card p-8 text-center">
+        <svg className="mx-auto mb-4" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#008060" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="12" r="10"/>
+          <path d="M8 12l3 3 5-5"/>
+        </svg>
+        <h2 className="text-lg font-semibold text-shopify-text mb-1">
+          Changes applied to your Shopify store!
+        </h2>
+        <p className="text-sm text-shopify-secondary">
+          {product.name} has been updated successfully.
+        </p>
+      </div>
+
+      {/* Score improvement card */}
+      <div className="bg-white rounded-card shadow-card p-6">
+        <div className="flex items-center justify-center gap-6">
+          <div className="text-center">
+            <p className="text-xs text-shopify-secondary mb-1">Before</p>
+            <span className="text-3xl font-bold text-shopify-secondary">{scoreBefore}</span>
+          </div>
+          <div className="text-center">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#008060" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M5 12h14"/>
+              <path d="M13 6l6 6-6 6"/>
+            </svg>
+          </div>
+          <div className="text-center">
+            <p className="text-xs text-shopify-secondary mb-1">After</p>
+            <span className="text-3xl font-bold text-shopify-green"><AnimatedScore target={scoreAfter} /></span>
+          </div>
+          <div className="text-center bg-shopify-success-light px-4 py-2 rounded-card border border-shopify-green/20">
+            <span className="text-lg font-bold text-shopify-green">
+              {delta >= 0 ? '+' : ''}{delta} points
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Applied fields */}
+      <div className="bg-white rounded-card shadow-card p-5">
+        <p className="text-xs font-semibold uppercase tracking-wide text-shopify-secondary mb-3">What was applied</p>
+        <div className="space-y-2">
+          {appliedFields.map((f, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#008060" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M20 6L9 17l-5-5"/>
+              </svg>
+              <span className="text-sm text-shopify-text capitalize">{f.replace('metafield:', '').replace(/_/g, ' ')} updated</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Actions */}
+      <div className="flex items-center gap-3">
+        {shopifyUrl && (
+          <a
+            href={shopifyUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-sm font-medium text-shopify-green border border-shopify-green rounded-btn px-4 py-2.5 hover:bg-shopify-green-light transition-colors"
+          >
+            View in Shopify &#8594;
+          </a>
+        )}
+        <button
+          onClick={onOptimizeAnother}
+          className="bg-shopify-green hover:bg-shopify-green-dark text-white text-sm font-medium px-5 py-2.5 rounded-btn transition-colors"
+        >
+          Optimize another product
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ──────────────────────────────────────────────
+// HISTORY TAB
+// ──────────────────────────────────────────────
+
+function HistoryTab({ storeData }) {
+  const [history, setHistory] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+  const [revertingId, setRevertingId] = useState(null)
+  const [revertConfirm, setRevertConfirm] = useState(null)
+  const [toast, setToast] = useState(null)
+
+  const loadHistory = async () => {
+    if (!storeData?.domain) return
+    setLoading(true)
+    try {
+      const res = await fetch(`/api/products/optimization-history?store=${storeData.domain}`)
+      if (!res.ok) throw new Error('Failed to load history')
+      const data = await res.json()
+      setHistory(data)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => { loadHistory() }, [storeData?.domain])
+
+  const handleRevert = async (row) => {
+    setRevertConfirm(null)
+    setRevertingId(row.id)
+    try {
+      const res = await fetch('/api/products/revert', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          store_domain: storeData.domain,
+          product_id: row.product_id,
+          history_id: row.id,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Revert failed')
+      setToast('Listing reverted successfully')
+      setTimeout(() => setToast(null), 3000)
+      await loadHistory()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setRevertingId(null)
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-48 text-shopify-secondary text-sm">
+        <Spinner size={18} />
+        <span className="ml-2">Loading history...</span>
+      </div>
+    )
+  }
+
+  if (error) {
+    return <div className="p-4 bg-shopify-critical-light text-shopify-critical rounded-card border border-red-200 text-sm">{error}</div>
+  }
+
+  if (history.length === 0) {
+    return (
+      <div className="bg-white rounded-card shadow-card py-16 flex flex-col items-center text-center gap-3 fade-up">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#6D7175" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="12" r="10"/>
+          <polyline points="12 6 12 12 16 14"/>
+        </svg>
+        <p className="text-sm font-medium text-shopify-text">No optimization history yet</p>
+        <p className="text-xs text-shopify-secondary max-w-xs">
+          Applied optimizations will appear here with the ability to undo.
+        </p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-4 fade-up">
+      {/* Toast */}
+      {toast && (
+        <div className="bg-shopify-success-light border border-shopify-green/20 rounded-card px-4 py-3 text-sm font-medium text-shopify-green flex items-center gap-2 fade-up">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="10"/>
+            <path d="M8 12l3 3 5-5"/>
+          </svg>
+          {toast}
+        </div>
+      )}
+
+      {/* Revert confirmation */}
+      {revertConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setRevertConfirm(null)}>
+          <div className="bg-white rounded-card shadow-card w-full max-w-sm mx-4 p-6 fade-up" onClick={e => e.stopPropagation()}>
+            <h3 className="text-base font-semibold text-shopify-text mb-2">
+              Revert {revertConfirm.product_title} to original listing?
+            </h3>
+            <p className="text-sm text-shopify-secondary mb-4">This will restore the product to its state before the optimization was applied.</p>
+            <div className="flex justify-end gap-3">
+              <button onClick={() => setRevertConfirm(null)} className="text-sm font-medium text-shopify-secondary border border-shopify-border rounded-btn px-4 py-2 hover:bg-shopify-bg transition-colors">
+                Cancel
+              </button>
+              <button onClick={() => handleRevert(revertConfirm)} className="bg-shopify-critical hover:opacity-90 text-white text-sm font-medium px-4 py-2 rounded-btn transition-colors">
+                Confirm Revert
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="bg-white rounded-card shadow-card overflow-hidden">
+        <table className="w-full text-sm">
+          <thead className="bg-shopify-bg text-shopify-secondary text-xs uppercase tracking-wide border-b border-shopify-border">
+            <tr>
+              <th className="px-5 py-3 text-left">Product Name</th>
+              <th className="px-5 py-3 text-left">Date Applied</th>
+              <th className="px-5 py-3 text-left">Fields Changed</th>
+              <th className="px-5 py-3 text-left">Score</th>
+              <th className="px-5 py-3 text-left">Status</th>
+              <th className="px-5 py-3 text-right">Action</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-shopify-border">
+            {history.map(row => {
+              let fields = []
+              try { fields = JSON.parse(row.fields_changed || '[]') } catch (e) { /* noop */ }
+              const isApplied = row.status === 'applied'
+              return (
+                <tr key={row.id} className="hover:bg-shopify-bg">
+                  <td className="px-5 py-3.5 font-medium text-shopify-text">{row.product_title}</td>
+                  <td className="px-5 py-3.5 text-shopify-secondary">
+                    {new Date(row.applied_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                  </td>
+                  <td className="px-5 py-3.5 text-shopify-secondary">
+                    {fields.map(f => f.replace('metafield:', '').replace(/_/g, ' ')).join(', ') || '—'}
+                  </td>
+                  <td className="px-5 py-3.5">
+                    <span className="text-shopify-secondary">{row.score_before}</span>
+                    <span className="mx-1 text-shopify-secondary">&#8594;</span>
+                    <span className="font-semibold text-shopify-green">{row.score_after}</span>
+                    <span className={`ml-1 text-xs font-medium ${row.score_delta >= 0 ? 'text-shopify-green' : 'text-shopify-critical'}`}>
+                      ({row.score_delta >= 0 ? '+' : ''}{row.score_delta})
+                    </span>
+                  </td>
+                  <td className="px-5 py-3.5">
+                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                      isApplied
+                        ? 'bg-shopify-success-light text-shopify-green'
+                        : 'bg-shopify-bg text-shopify-secondary'
+                    }`}>
+                      {isApplied ? 'Applied' : 'Reverted'}
+                    </span>
+                  </td>
+                  <td className="px-5 py-3.5 text-right">
+                    {isApplied && (
+                      <button
+                        onClick={() => setRevertConfirm(row)}
+                        disabled={revertingId === row.id}
+                        className="text-xs font-medium text-shopify-critical border border-shopify-critical rounded-btn px-2.5 py-1 hover:bg-shopify-critical-light transition-colors disabled:opacity-50"
+                      >
+                        {revertingId === row.id ? 'Reverting...' : 'Undo'}
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+// ──────────────────────────────────────────────
+// MAIN COMPONENT
+// ──────────────────────────────────────────────
+
+export default function BeforeAfter({ selectedProduct, storeData, setView, products = [] }) {
+  const product = selectedProduct || products[0] || {}
+
+  const [tab, setTab] = useState('optimize') // 'optimize' | 'history'
+  const [showModal, setShowModal] = useState(false)
+  const [showRubric, setShowRubric] = useState(false)
+  const [applying, setApplying] = useState(false)
+  const [applyStep, setApplyStep] = useState(0)
+  const [success, setSuccess] = useState(null) // { scoreBefore, scoreAfter, appliedFields }
+  const [error, setError] = useState(null)
+
+  const productCat = product.category || 'general'
+  const catColors = CATEGORY_COLORS[productCat] || CATEGORY_COLORS.general
+  const catLabel = CATEGORY_LABELS[productCat] || 'General'
+
+  const projectedScore = Math.min(95, (isNaN(product.score) ? 0 : product.score) + 40)
+  const hasWrite = storeData?.hasWriteAccess !== false
+
+  // Build the optimized values
+  const optimizedDesc = product.optimizedDescription || product.description
+  const optimizedReturnPolicy = 'Free returns accepted within 30 days of delivery. Full refund processed within 3-5 business days.'
+  const optimizedShipping = 'Free standard delivery. Arrives in 5-7 business days. Express options available at checkout.'
+  const optimizedTags = [...(product.tags || []), 'free-returns', 'fast-shipping', 'ai-optimized']
+  const oldTags = product.tags || []
+
+  // Build change list for modal
+  const changeList = []
+  if (optimizedDesc !== product.description) changeList.push('Product description (updated)')
+  if (optimizedTags.length !== oldTags.length) changeList.push(`Product tags (${optimizedTags.length - oldTags.length} tags added)`)
+  changeList.push('Return policy metafield (new)')
+  changeList.push('Shipping information metafield (new)')
+
+  // Build apply steps for progress indicator
+  const applySteps = []
+  if (optimizedDesc !== product.description) applySteps.push('Updating product description...')
+  if (optimizedTags.length !== oldTags.length) applySteps.push('Applying tags...')
+  applySteps.push('Adding metafields...')
+  applySteps.push('Re-scoring your product...')
+
+  const handleApply = async () => {
+    setShowModal(false)
+    setApplying(true)
+    setApplyStep(0)
+    setError(null)
+
+    // Build updates payload
+    const updates = {}
+    if (optimizedDesc !== product.description) {
+      updates.description = optimizedDesc
+    }
+    updates.tags = optimizedTags.join(', ')
+    updates.metafields = [
+      {
+        namespace: 'custom',
+        key: 'return_policy',
+        value: optimizedReturnPolicy,
+        type: 'multi_line_text_field',
+      },
+      {
+        namespace: 'custom',
+        key: 'shipping_info',
+        value: optimizedShipping,
+        type: 'multi_line_text_field',
+      },
+    ]
+
+    // Animate steps
+    const stepDuration = 800
+    for (let i = 0; i < applySteps.length - 1; i++) {
+      await new Promise(r => setTimeout(r, stepDuration))
+      setApplyStep(prev => prev + 1)
+    }
+
+    try {
+      const res = await fetch('/api/products/apply-optimization', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          store_domain: storeData.domain,
+          product_id: product.id,
+          updates,
+        }),
+      })
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        throw new Error(data.error || `Apply failed (HTTP ${res.status})`)
+      }
+
+      // Final step done
+      setApplyStep(applySteps.length)
+      await new Promise(r => setTimeout(r, 400))
+
+      setSuccess({
+        scoreBefore: data.new_score - data.score_delta,
+        scoreAfter: data.new_score,
+        appliedFields: data.applied_fields || [],
+      })
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setApplying(false)
+    }
+  }
+
+  // ── APPLYING STATE ──
+  if (applying) {
+    return (
+      <div className="space-y-5 max-w-4xl">
+        <div>
+          <h1 className="text-xl font-semibold text-shopify-text">Optimize Product</h1>
+          <p className="text-sm text-shopify-secondary mt-0.5">
+            Applying optimizations to <span className="font-medium text-shopify-text">{product.name}</span>
+          </p>
+        </div>
+        <ApplyingOverlay steps={applySteps} currentStep={applyStep} />
+      </div>
+    )
+  }
+
+  // ── SUCCESS STATE ──
+  if (success) {
+    const shopifyUrl = storeData?.domain
+      ? `https://${storeData.domain}/admin/products/${product.id}`
+      : null
+
+    return (
+      <div className="space-y-5 max-w-4xl">
+        <div>
+          <h1 className="text-xl font-semibold text-shopify-text">Optimize Product</h1>
+        </div>
+        <SuccessView
+          product={product}
+          scoreBefore={success.scoreBefore}
+          scoreAfter={success.scoreAfter}
+          appliedFields={success.appliedFields}
+          shopifyUrl={shopifyUrl}
+          onOptimizeAnother={() => setView('products')}
+        />
+      </div>
+    )
+  }
+
+  // ── MAIN RENDER ──
+  return (
+    <div className="space-y-5 max-w-4xl pb-20">
 
       {/* Header */}
       <div className="flex items-start justify-between">
@@ -100,79 +771,169 @@ export default function BeforeAfter({ selectedProduct }) {
           <p className="text-sm text-shopify-secondary mt-0.5">
             AI-generated improvements for <span className="font-medium text-shopify-text">{product.name}</span>
           </p>
-        </div>
-        {applied && (
-          <span className="inline-flex items-center gap-1.5 text-sm font-medium text-shopify-green bg-shopify-success-light px-3 py-1.5 rounded-card border border-shopify-green/20">
-            ✓ Changes Applied
-          </span>
-        )}
-      </div>
-
-      {/* Score improvement */}
-      <ScoreUpgrade before={product.score} after={projectedScore} />
-
-      {/* Column labels */}
-      <div className="flex gap-4 px-1">
-        <div className="w-1/2 flex items-center gap-2">
-          <span className="w-3 h-3 rounded-full bg-shopify-border" />
-          <span className="text-xs font-semibold uppercase tracking-wide text-shopify-secondary">Current Listing</span>
-        </div>
-        <div className="w-1/2 flex items-center gap-2">
-          <span className="w-3 h-3 rounded-full bg-shopify-green" />
-          <span className="text-xs font-semibold uppercase tracking-wide text-shopify-green">AI-Optimized Version</span>
+          <div className="flex items-center gap-2 mt-2">
+            <span
+              className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium"
+              style={{ backgroundColor: catColors.bg, color: catColors.text }}
+            >
+              {catLabel}
+            </span>
+            <button
+              onClick={() => setShowRubric(true)}
+              className="text-xs text-shopify-green font-medium hover:underline"
+            >
+              View rubric
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Diff panel */}
-      <div className="bg-white rounded-card shadow-card px-6 overflow-hidden">
-        <FieldRow
-          label="Product Description"
-          oldVal={product.description}
-          newVal={product.optimizedDescription}
-        />
-        <FieldRow
-          label="Return Policy"
-          oldVal={product.returnPolicy}
-          newVal="Free returns accepted within 30 days of delivery. Full refund processed within 3–5 business days."
-        />
-        <FieldRow
-          label="Shipping Information"
-          oldVal={product.shipping}
-          newVal="Free standard delivery. Arrives in 5–7 business days. Express options available at checkout."
-        />
-        <FieldRow
-          label="Product Tags"
-          oldVal={product.tags.length ? product.tags.join(', ') : null}
-          newVal={[...product.tags, 'free-returns', 'fast-shipping', 'ai-optimized'].join(', ')}
-        />
+      {/* Tab pills */}
+      <div className="flex bg-shopify-bg p-1 rounded-btn border border-shopify-border inline-flex">
+        <button
+          onClick={() => setTab('optimize')}
+          className={`px-4 py-1.5 text-sm font-medium rounded transition-colors ${tab === 'optimize' ? 'bg-white shadow-sm text-shopify-text' : 'text-shopify-secondary hover:text-shopify-text'}`}
+        >
+          Optimize
+        </button>
+        <button
+          onClick={() => setTab('history')}
+          className={`px-4 py-1.5 text-sm font-medium rounded transition-colors ${tab === 'history' ? 'bg-white shadow-sm text-shopify-text' : 'text-shopify-secondary hover:text-shopify-text'}`}
+        >
+          History
+        </button>
       </div>
 
-      {/* Action bar */}
-      {!applied ? (
-        <div className="flex items-center gap-3 pt-1">
-          <button
-            onClick={() => setApplied(true)}
-            className="bg-shopify-green hover:bg-shopify-green-dark text-white text-sm font-medium px-6 py-2.5 rounded-btn transition-colors flex items-center gap-2"
-          >
-            ✓ Apply AI Improvements
-          </button>
-          <p className="text-xs text-shopify-secondary">
-            Changes will sync back to your Shopify store description
-          </p>
-        </div>
-      ) : (
-        <div className="bg-shopify-success-light border border-shopify-green/20 rounded-card px-5 py-4">
-          <p className="text-sm font-semibold text-shopify-green flex items-center gap-2">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="10"/>
-              <path d="M8 12l3 3 5-5"/>
-            </svg>
-            Optimization complete!
-          </p>
-          <p className="text-xs text-shopify-secondary mt-1">
-            Your product listing has been updated. AI systems will pick up the new data within 24–48 hours.
-          </p>
-        </div>
+      {/* History tab */}
+      {tab === 'history' && <HistoryTab storeData={storeData} />}
+
+      {/* Optimize tab */}
+      {tab === 'optimize' && (
+        <>
+          {/* Apply to Store button — top */}
+          {hasWrite && (
+            <button
+              onClick={() => setShowModal(true)}
+              className="w-full bg-shopify-green hover:bg-shopify-green-dark text-white text-sm font-semibold py-3 rounded-btn transition-colors flex items-center justify-center gap-2"
+            >
+              &#9889; Apply to Store
+            </button>
+          )}
+
+          {/* Write access warning */}
+          {!hasWrite && (
+            <div className="bg-shopify-warning-light border border-shopify-warning rounded-card px-4 py-3">
+              <p className="text-xs text-shopify-warning-text font-medium">
+                Your access token only has read access. To apply optimizations directly to your store,
+                please create a token with <span className="font-mono">write_products</span> scope.
+              </p>
+              <a
+                href="https://help.shopify.com/en/manual/apps/app-types/custom-apps#update-admin-api-scopes"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-shopify-green font-medium hover:underline mt-1 inline-block"
+              >
+                How to fix this &#8594;
+              </a>
+            </div>
+          )}
+
+          {/* Error banner */}
+          {error && (
+            <div className="bg-shopify-critical-light border border-red-200 rounded-card px-4 py-3">
+              <p className="text-sm text-shopify-critical font-medium">Failed to apply changes: {error}</p>
+              <p className="text-xs text-shopify-secondary mt-1">Please check your access token has write_products scope.</p>
+              <a
+                href="https://help.shopify.com/en/manual/apps/app-types/custom-apps#update-admin-api-scopes"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-shopify-green font-medium hover:underline mt-1 inline-block"
+              >
+                How to fix this &#8594;
+              </a>
+            </div>
+          )}
+
+          {/* Category issues panel */}
+          <CategoryIssuesPanel product={product} />
+
+          {/* Score breakdown bar */}
+          <ScoreBreakdownBar product={product} />
+
+          {/* Score improvement */}
+          <ScoreUpgrade before={product.score} after={projectedScore} />
+
+          {/* Column labels */}
+          <div className="flex gap-4 px-1">
+            <div className="w-1/2 flex items-center gap-2">
+              <span className="w-3 h-3 rounded-full bg-shopify-border" />
+              <span className="text-xs font-semibold uppercase tracking-wide text-shopify-secondary">Current Listing</span>
+            </div>
+            <div className="w-1/2 flex items-center gap-2">
+              <span className="w-3 h-3 rounded-full bg-shopify-green" />
+              <span className="text-xs font-semibold uppercase tracking-wide text-shopify-green">AI-Optimized Version</span>
+            </div>
+          </div>
+
+          {/* Diff panel */}
+          <div className="bg-white rounded-card shadow-card px-6 overflow-hidden">
+            <FieldRow
+              label="Product Description"
+              oldVal={product.description}
+              newVal={optimizedDesc}
+            />
+            <FieldRow
+              label="Return Policy"
+              oldVal={product.returnPolicy}
+              newVal={optimizedReturnPolicy}
+            />
+            <FieldRow
+              label="Shipping Information"
+              oldVal={product.shipping}
+              newVal={optimizedShipping}
+            />
+            <FieldRow
+              label="Product Tags"
+              oldVal={oldTags.length ? oldTags.join(', ') : null}
+              newVal={optimizedTags.join(', ')}
+            />
+          </div>
+
+          {/* Sticky footer bar */}
+          {hasWrite && (
+            <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-shopify-border z-40 shadow-card">
+              <div className="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
+                <p className="text-sm text-shopify-secondary">
+                  Ready to apply optimizations for <span className="font-medium text-shopify-text">{product.name}</span>
+                </p>
+                <button
+                  onClick={() => setShowModal(true)}
+                  className="bg-shopify-green hover:bg-shopify-green-dark text-white text-sm font-semibold px-6 py-2.5 rounded-btn transition-colors flex items-center gap-2"
+                >
+                  &#9889; Apply to Store
+                </button>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* Confirmation modal */}
+      {showModal && (
+        <ConfirmModal
+          product={product}
+          changes={changeList}
+          onCancel={() => setShowModal(false)}
+          onConfirm={handleApply}
+        />
+      )}
+
+      {/* Rubric modal */}
+      {showRubric && (
+        <RubricModal
+          category={productCat}
+          onClose={() => setShowRubric(false)}
+        />
       )}
     </div>
   )

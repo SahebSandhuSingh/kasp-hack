@@ -1,22 +1,9 @@
 const axios = require('axios');
+const { scoreProduct: categoryScoreProduct } = require('./categoryEngine');
 
 // ─────────────────────────────────────────
 // HELPERS
 // ─────────────────────────────────────────
-function stripHtml(html) {
-  if (!html) return '';
-  return String(html).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
-}
-
-function wordCount(text) {
-  if (!text) return 0;
-  return stripHtml(text).split(/\s+/).filter(Boolean).length;
-}
-
-function containsKeyword(text, kw) {
-  return stripHtml(text || '').toLowerCase().includes(kw.toLowerCase());
-}
-
 function today() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -28,51 +15,10 @@ function daysAgo(n) {
 }
 
 // ─────────────────────────────────────────
-// SCORING ENGINE
+// SCORING ENGINE (delegates to categoryEngine)
 // ─────────────────────────────────────────
 function scoreProduct(product) {
-  let score = 0;
-  const issues = [];
-
-  const desc = product.body_html || '';
-  const wc = wordCount(desc);
-
-  // Description > 50 words (+20)
-  if (wc >= 50) score += 20;
-  else issues.push('Description too short (<50 words)');
-
-  // Return policy (+15)
-  if (containsKeyword(desc, 'return')) score += 15;
-  else issues.push('Missing return policy');
-
-  // Shipping info (+15)
-  if (containsKeyword(desc, 'shipping') || containsKeyword(desc, 'delivery')) score += 15;
-  else issues.push('Missing shipping info');
-
-  // Tags > 3 (+15)
-  const tags = product.tags ? product.tags.split(',').filter(Boolean) : [];
-  if (tags.length > 3) score += 15;
-  else issues.push('Fewer than 3 product tags');
-
-  // Ingredients/specs (+15)
-  if (
-    containsKeyword(desc, 'ingredient') ||
-    containsKeyword(desc, 'specification') ||
-    containsKeyword(desc, 'material') ||
-    containsKeyword(desc, 'composition')
-  ) score += 15;
-  else issues.push('No ingredients or specs');
-
-  // More than 1 image (+10)
-  if (product.images && product.images.length > 1) score += 10;
-  else issues.push('Only one product image');
-
-  // Compare-at price (+10)
-  const hasCompareAt = product.variants?.some(v => v.compare_at_price);
-  if (hasCompareAt) score += 10;
-  else issues.push('No compare-at price set');
-
-  return { score: Math.min(score, 100), issues, issues_count: issues.length };
+  return categoryScoreProduct(product);
 }
 
 // ─────────────────────────────────────────
@@ -89,17 +35,21 @@ async function fetchAndScoreProducts(storeDomain, accessToken) {
   const rawProducts = resp.data.products || [];
 
   const scored = rawProducts.map(p => {
-    const { score, issues, issues_count } = scoreProduct(p);
+    const result = scoreProduct(p);
     return {
-      product_id:    p.id.toString(),
-      product_title: p.title,
-      score,
-      issues,
-      issues_count,
-      store_domain:  clean,
-      price:         p.variants?.[0]?.price || '0',
-      image:         p.images?.[0]?.src || null,
-      tags:          p.tags ? p.tags.split(',').map(t => t.trim()).filter(Boolean) : [],
+      product_id:          p.id.toString(),
+      product_title:       p.title,
+      score:               result.score,
+      issues:              result.issues,
+      issues_count:        result.issues_count,
+      category:            result.category,
+      category_confidence: result.category_confidence,
+      matched_signals:     result.matched_signals,
+      criteria_results:    result.criteria_results,
+      store_domain:        clean,
+      price:               p.variants?.[0]?.price || '0',
+      image:               p.images?.[0]?.src || null,
+      tags:                p.tags ? p.tags.split(',').map(t => t.trim()).filter(Boolean) : [],
     };
   });
 
