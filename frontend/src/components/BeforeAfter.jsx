@@ -6,7 +6,7 @@ import { CATEGORY_LABELS, CATEGORY_COLORS } from '../categoryConstants'
 // ──────────────────────────────────────────────
 
 function CategoryIssuesPanel({ product }) {
-  const issues = product.issues || []
+  const issues = Array.isArray(product.issues) ? product.issues : []
   const cat = product.category || 'general'
   const colors = CATEGORY_COLORS[cat] || CATEGORY_COLORS.general
   const label = CATEGORY_LABELS[cat] || 'General'
@@ -634,25 +634,42 @@ export default function BeforeAfter({ selectedProduct, storeData, setView, produ
   const projectedScore = Math.min(95, (isNaN(product.score) ? 0 : product.score) + 40)
   const hasWrite = storeData?.hasWriteAccess !== false
 
-  // Build the optimized values
-  const optimizedDesc = product.optimizedDescription || product.description
-  const optimizedReturnPolicy = 'Free returns accepted within 30 days of delivery. Full refund processed within 3-5 business days.'
-  const optimizedShipping = 'Free standard delivery. Arrives in 5-7 business days. Express options available at checkout.'
-  const optimizedTags = [...(product.tags || []), 'free-returns', 'fast-shipping', 'ai-optimized']
-  const oldTags = product.tags || []
+  // Build optimized values from real Shopify fields
+  const currentDesc = product.description || ''
+  const currentTitle = product.title || product.name || ''
+  const currentTags = Array.isArray(product.tags) ? product.tags : (product.tags || '').split(',').map(t => t.trim()).filter(Boolean)
+  const currentProductType = product.product_type || product.category || ''
+
+  // AI-suggested improvements for real Shopify fields
+  const optimizedTitle = currentTitle.length < 30
+    ? `${currentTitle} — Premium Quality ${catLabel} Product`
+    : currentTitle
+
+  const descAdditions = []
+  if (currentDesc.length < 200) descAdditions.push('Crafted with premium quality materials for lasting performance and satisfaction.')
+  if (!/return|refund|exchange/i.test(currentDesc)) descAdditions.push('\n\nReturn Policy: Free returns accepted within 30 days of delivery. Full refund processed within 3-5 business days.')
+  if (!/shipping|delivery|dispatch/i.test(currentDesc)) descAdditions.push('\n\nShipping: Free standard delivery. Arrives in 5-7 business days. Express options available at checkout.')
+  const optimizedDesc = descAdditions.length > 0 ? (currentDesc + '\n\n' + descAdditions.join('')).trim() : currentDesc
+
+  const suggestedTags = ['ai-optimized']
+  if (!/return/i.test(currentTags.join(','))) suggestedTags.push('free-returns')
+  if (!/shipping/i.test(currentTags.join(','))) suggestedTags.push('fast-shipping')
+  const optimizedTags = [...currentTags, ...suggestedTags.filter(t => !currentTags.includes(t))]
+
+  const optimizedProductType = currentProductType || catLabel
 
   // Build change list for modal
   const changeList = []
-  if (optimizedDesc !== product.description) changeList.push('Product description (updated)')
-  if (optimizedTags.length !== oldTags.length) changeList.push(`Product tags (${optimizedTags.length - oldTags.length} tags added)`)
-  changeList.push('Return policy metafield (new)')
-  changeList.push('Shipping information metafield (new)')
+  if (optimizedTitle !== currentTitle) changeList.push('Product title (improved)')
+  if (optimizedDesc !== currentDesc) changeList.push('Product description (updated)')
+  if (optimizedTags.join(',') !== currentTags.join(',')) changeList.push(`Product tags (${optimizedTags.length - currentTags.length} tags added)`)
+  if (optimizedProductType !== currentProductType) changeList.push('Product type (set)')
 
   // Build apply steps for progress indicator
   const applySteps = []
-  if (optimizedDesc !== product.description) applySteps.push('Updating product description...')
-  if (optimizedTags.length !== oldTags.length) applySteps.push('Applying tags...')
-  applySteps.push('Adding metafields...')
+  if (optimizedDesc !== currentDesc) applySteps.push('Updating product description...')
+  if (optimizedTags.join(',') !== currentTags.join(',')) applySteps.push('Applying tags...')
+  if (optimizedTitle !== currentTitle) applySteps.push('Updating product title...')
   applySteps.push('Re-scoring your product...')
 
   const handleApply = async () => {
@@ -661,26 +678,17 @@ export default function BeforeAfter({ selectedProduct, storeData, setView, produ
     setApplyStep(0)
     setError(null)
 
-    // Build updates payload
+    // Build updates payload — only real Shopify fields, no metafields
     const updates = {}
-    if (optimizedDesc !== product.description) {
+    if (optimizedDesc !== currentDesc) {
       updates.description = optimizedDesc
     }
-    updates.tags = optimizedTags.join(', ')
-    updates.metafields = [
-      {
-        namespace: 'custom',
-        key: 'return_policy',
-        value: optimizedReturnPolicy,
-        type: 'multi_line_text_field',
-      },
-      {
-        namespace: 'custom',
-        key: 'shipping_info',
-        value: optimizedShipping,
-        type: 'multi_line_text_field',
-      },
-    ]
+    if (optimizedTags.join(',') !== currentTags.join(',')) {
+      updates.tags = optimizedTags.join(', ')
+    }
+    if (optimizedTitle !== currentTitle) {
+      updates.title = optimizedTitle
+    }
 
     // Animate steps
     const stepDuration = 800
@@ -695,6 +703,7 @@ export default function BeforeAfter({ selectedProduct, storeData, setView, produ
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          store_domain: storeData?.domain,
           product_id: product.id,
           updates,
         }),
@@ -715,6 +724,17 @@ export default function BeforeAfter({ selectedProduct, storeData, setView, produ
         scoreAfter: data.new_score,
         appliedFields: data.applied_fields || [],
       })
+
+      // Re-fetch audit data so product list reflects updated score
+      try {
+        const auditRes = await fetch('/api/audit')
+        if (auditRes.ok) {
+          const auditData = await auditRes.json()
+          if (typeof window.__refreshProducts === 'function') {
+            window.__refreshProducts(auditData.products || [])
+          }
+        }
+      } catch (_) { /* non-critical */ }
     } catch (err) {
       setError(err.message)
     } finally {
@@ -878,24 +898,24 @@ export default function BeforeAfter({ selectedProduct, storeData, setView, produ
           {/* Diff panel */}
           <div className="bg-white rounded-card shadow-card px-6 overflow-hidden">
             <FieldRow
-              label="Product Description"
-              oldVal={product.description}
+              label="Product Title"
+              oldVal={currentTitle}
+              newVal={optimizedTitle}
+            />
+            <FieldRow
+              label="Product Description (body_html)"
+              oldVal={currentDesc}
               newVal={optimizedDesc}
             />
             <FieldRow
-              label="Return Policy"
-              oldVal={product.returnPolicy}
-              newVal={optimizedReturnPolicy}
-            />
-            <FieldRow
-              label="Shipping Information"
-              oldVal={product.shipping}
-              newVal={optimizedShipping}
-            />
-            <FieldRow
               label="Product Tags"
-              oldVal={oldTags.length ? oldTags.join(', ') : null}
+              oldVal={currentTags.length ? currentTags.join(', ') : null}
               newVal={optimizedTags.join(', ')}
+            />
+            <FieldRow
+              label="Product Type"
+              oldVal={currentProductType}
+              newVal={optimizedProductType}
             />
           </div>
 

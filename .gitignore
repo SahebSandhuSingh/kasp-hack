@@ -26,6 +26,10 @@ out/
 # ── Generated reports ─────────────────────────
 backend/audit_report.json
 
+# ── SQLite runtime files ─────────────────────
+backend/*.db-shm
+backend/*.db-wal
+
 # ── macOS ─────────────────────────────────────
 .DS_Store
 .AppleDouble

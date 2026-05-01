@@ -56,6 +56,12 @@ export default function App() {
       .catch(() => setProducts([]))
   }, [storeData])
 
+  // Allow child components to refresh product list after mutations
+  useEffect(() => {
+    window.__refreshProducts = (newProducts) => setProducts(newProducts)
+    return () => { delete window.__refreshProducts }
+  }, [])
+
   // Called when ConnectStore succeeds
   const handleConnected = (data) => {
     setStoreData(data)

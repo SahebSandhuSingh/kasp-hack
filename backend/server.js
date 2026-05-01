@@ -68,27 +68,8 @@ const LIVE_QUERIES = [
 // ──────────────────────────────────────────────
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-async function loadProducts() {
-  const { fetchProducts } = require('./shopify');
-  const raw = await fetchProducts();
-  return raw.map(p => ({
-    id: p.id.toString(),
-    name: p.title,
-    price: parseFloat(p.variants?.[0]?.price || 0),
-    description: p.body_html ? p.body_html.replace(/<[^>]*>/g, '').trim() : '',
-    return_policy: null,
-    shipping: null,
-    rating: null,
-    review_count: 0,
-    reviews: [],
-    tags: p.tags ? p.tags.split(',').map(t => t.trim()) : [],
-    ingredients: null,
-    is_vegan: null,
-    product_type: p.product_type || null,
-    vendor: p.vendor || null,
-    shopify_url: `https://${process.env.SHOPIFY_STORE}/products/${p.handle}`
-  }));
-}
+// Active sessions map — used by background cron for periodic syncs
+const activeSessions = new Map();
 
 async function loadSessionProducts(domain, accessToken) {
   const raw = await fetchShopifyProducts(domain, accessToken);
@@ -148,30 +129,48 @@ async function resolveAccessToken(storeDomain, clientId, clientSecret) {
     const verified = await verifyShopifyConnection(storeDomain, accessToken);
     return { accessToken, shop: verified.data.shop };
   } catch (oauthErr) {
+    console.warn('OAuth client_credentials exchange failed:', oauthErr.response?.status, oauthErr.response?.data || oauthErr.message);
     // Fall through to direct auth if OAuth exchange fails
   }
 
   // 2. Fallback: try using clientSecret directly as access token (shpat_ tokens)
-  const direct = await verifyShopifyConnection(storeDomain, clientSecret);
-  return { accessToken: clientSecret, shop: direct.data.shop };
+  try {
+    const direct = await verifyShopifyConnection(storeDomain, clientSecret);
+    return { accessToken: clientSecret, shop: direct.data.shop };
+  } catch (directErr) {
+    console.error('Direct token fallback also failed:', directErr.response?.status, directErr.response?.data || directErr.message);
+    throw directErr;
+  }
 }
 
 async function checkScopeStatus(storeDomain, accessToken) {
-  const required = ["read_products", "read_orders"];
-  const recommended = ["write_products"];
-  const resp = await axios.get(
-    `https://${storeDomain}/admin/api/2024-01/access_scopes.json`,
-    { headers: { 'X-Shopify-Access-Token': accessToken } }
-  );
-  const scopes = (resp.data.access_scopes || []).map(s => s.handle);
+  const required = ["read_products"];
+  const recommended = ["write_products", "read_orders"];
+  try {
+    const resp = await axios.get(
+      `https://${storeDomain}/admin/api/2024-01/access_scopes.json`,
+      { headers: { 'X-Shopify-Access-Token': accessToken } }
+    );
+    const scopes = (resp.data.access_scopes || []).map(s => s.handle);
 
-  return {
-    has_read_products: scopes.includes("read_products"),
-    has_write_products: scopes.includes("write_products"),
-    has_read_orders: scopes.includes("read_orders"),
-    missing_required: required.filter(scope => !scopes.includes(scope)),
-    missing_recommended: recommended.filter(scope => !scopes.includes(scope))
-  };
+    return {
+      has_read_products: scopes.includes("read_products"),
+      has_write_products: scopes.includes("write_products"),
+      has_read_orders: scopes.includes("read_orders"),
+      missing_required: required.filter(scope => !scopes.includes(scope)),
+      missing_recommended: recommended.filter(scope => !scopes.includes(scope))
+    };
+  } catch (err) {
+    console.warn('Scope check failed (non-fatal):', err.response?.status, err.message);
+    // If scope check fails, assume minimal access based on what we know
+    return {
+      has_read_products: true,
+      has_write_products: false,
+      has_read_orders: false,
+      missing_required: [],
+      missing_recommended: recommended
+    };
+  }
 }
 
 function startBackgroundSync(storeDomain, accessToken) {
@@ -428,6 +427,9 @@ app.post('/api/auth/connect', async (req, res) => {
       scope_status: scopeStatus,
       connected_at: new Date().toISOString()
     };
+
+    // Track this session for background cron sync
+    activeSessions.set(storeDomain, accessToken);
 
     startBackgroundSync(storeDomain, accessToken);
 
@@ -807,6 +809,12 @@ app.put('/api/products/apply-optimization', requireAuth, async (req, res) => {
       productPayload.tags = updates.tags;
     }
 
+    if (updates.title !== undefined) {
+      appliedFields.push('title');
+      oldValues.title = currentProduct.title || '';
+      productPayload.title = updates.title;
+    }
+
     // PUT product update to Shopify
     if (appliedFields.length > 0) {
       try {
@@ -1081,37 +1089,38 @@ app.listen(PORT, () => {
 
 
 setInterval(async () => {
-  const domain = process.env.SHOPIFY_STORE_DOMAIN;
-  const accessToken = process.env.SHOPIFY_ACCESS_TOKEN;
-  
-  if (!domain || !accessToken) return;
+  if (activeSessions.size === 0) return;
 
-  const cleanDomain = domain.replace(/^https?:\/\//, '').replace(/\/+$/, '').trim();
   const currentDate = today();
 
-  try {
-    // Check if snapshot exists today
-    const exists = db.prepare('SELECT 1 FROM score_snapshots WHERE store_domain = ? AND snapshot_date = ? LIMIT 1').get(cleanDomain, currentDate);
-    if (exists) return;
+  for (const [domain, accessToken] of activeSessions.entries()) {
+    const cleanDomain = domain.replace(/^https?:\/\//, '').replace(/\/+$/, '').trim();
 
-    console.log(`\n[CRON] Daily sync triggered for ${cleanDomain}...`);
-    
-    // 1. Sync Products
-    const { scored } = await fetchAndScoreProducts(domain, accessToken);
-    const snapStmt = db.prepare(`INSERT INTO score_snapshots (product_id, product_title, score, issues_count, snapshot_date, store_domain) VALUES (?, ?, ?, ?, ?, ?)`);
-    db.transaction((snaps) => {
-      for (const snap of snaps) snapStmt.run(snap.product_id, snap.product_title, snap.score, snap.issues_count || 0, currentDate, cleanDomain);
-    })(scored);
+    try {
+      const exists = db.prepare('SELECT 1 FROM score_snapshots WHERE store_domain = ? AND snapshot_date = ? LIMIT 1').get(cleanDomain, currentDate);
+      if (exists) continue;
 
-    // 2. Sync Sales
-    const salesData = await fetchSalesData(domain, accessToken);
-    const salesStmt = db.prepare(`INSERT INTO product_sales (product_id, product_title, revenue, orders_count, period_start, period_end, store_domain) VALUES (?, ?, ?, ?, ?, ?, ?)`);
-    db.transaction((items) => {
-      for (const item of items) salesStmt.run(item.product_id, item.product_title, item.revenue, item.orders_count, item.period_start, item.period_end, item.store_domain);
-    })(salesData);
-    
-    console.log(`[CRON] Sync complete for ${cleanDomain}`);
-  } catch (err) {
-    console.error('[CRON] Sync failed:', err.message);
+      console.log(`\n[CRON] Daily sync triggered for ${cleanDomain}...`);
+
+      const { scored } = await fetchAndScoreProducts(domain, accessToken);
+      const snapStmt = db.prepare(`INSERT INTO score_snapshots (product_id, product_title, score, issues_count, snapshot_date, store_domain, category) VALUES (?, ?, ?, ?, ?, ?, ?)`);
+      db.transaction((snaps) => {
+        for (const snap of snaps) snapStmt.run(snap.product_id, snap.product_title, snap.score, snap.issues_count || 0, currentDate, cleanDomain, snap.category || 'general');
+      })(scored);
+
+      try {
+        const salesData = await fetchSalesData(domain, accessToken);
+        const salesStmt = db.prepare(`INSERT INTO product_sales (product_id, product_title, revenue, orders_count, period_start, period_end, store_domain) VALUES (?, ?, ?, ?, ?, ?, ?)`);
+        db.transaction((items) => {
+          for (const item of items) salesStmt.run(item.product_id, item.product_title, item.revenue, item.orders_count, item.period_start, item.period_end, item.store_domain);
+        })(salesData);
+      } catch (salesErr) {
+        console.warn(`[CRON] Sales sync skipped for ${cleanDomain}:`, salesErr.message);
+      }
+
+      console.log(`[CRON] Sync complete for ${cleanDomain}`);
+    } catch (err) {
+      console.error(`[CRON] Sync failed for ${cleanDomain}:`, err.message);
+    }
   }
 }, 60 * 60 * 1000); // Check every 60 minutes

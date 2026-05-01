@@ -274,7 +274,11 @@ export default function ProductTable({ setView, setSelectedProduct, products = [
                   <td className="px-5 py-3.5">
                     {p.status !== 'optimized' ? (
                       <button
-                        onClick={() => { setSelectedProduct(p); setView('beforeafter') }}
+                        onClick={() => {
+                          const original = products.find(op => String(op.id) === String(p.id)) || p
+                          setSelectedProduct({ ...original, name: original.title || original.name })
+                          setView('beforeafter')
+                        }}
                         className="text-xs font-medium text-shopify-green border border-shopify-green rounded-btn px-2.5 py-1 hover:bg-shopify-green-light transition-colors"
                       >
                         Optimize →
