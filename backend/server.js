@@ -8,7 +8,7 @@ const { fetchShopifyProducts, getStoreData, getAccessToken } = require('./shopif
 const { detectIssues } = require('./detect-issues');
 const { runCounterfactual } = require('./counterfactual');
 const db = require('./db');
-const { scoreProduct, fetchAndScoreProducts, today } = require('./shopifyDataService');
+const { scoreProduct, fetchAndScoreProducts, fetchSalesData, today } = require('./shopifyDataService');
 const { detectCategory, getRubric, CATEGORY_LABELS } = require('./categoryEngine');
 
 const app = express();
@@ -925,8 +925,8 @@ app.listen(PORT, () => {
 // ──────────────────────────────────────────────
 // BACKGROUND CRON JOBS
 // ──────────────────────────────────────────────
-const { fetchAndScoreProducts, fetchSalesData, today } = require('./shopifyDataService');
-const db = require('./db');
+
+
 
 setInterval(async () => {
   const domain = process.env.SHOPIFY_STORE_DOMAIN;
