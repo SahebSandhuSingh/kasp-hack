@@ -1,6 +1,51 @@
 import { useState, useEffect, useMemo } from 'react'
 import { CATEGORY_LABELS, CATEGORY_COLORS } from '../categoryConstants'
 
+// Standard AI shopping queries (mirrors LIVE_QUERIES in backend/server.js)
+const STANDARD_QUERIES = [
+  'best product with free returns and clear description',
+  'highly rated product with strong customer reviews',
+  'product with fast free shipping',
+  'most trusted product with detailed information',
+  'best value product with clear pricing',
+  'product with detailed ingredients or specifications',
+  'best overall product with complete information',
+]
+
+function coverageStatus(count) {
+  if (count >= 3) return { label: 'Good', color: '#008060', pillBg: 'bg-shopify-success-light', pillText: 'text-shopify-green' }
+  if (count >= 1) return { label: 'Weak', color: '#FFC453', pillBg: 'bg-shopify-warning-light', pillText: 'text-shopify-warning-text' }
+  return { label: 'Blind Spot', color: '#D72C0D', pillBg: 'bg-shopify-critical-light', pillText: 'text-shopify-critical' }
+}
+
+function signalColor(pct) {
+  if (pct >= 70) return { text: 'text-shopify-green', bar: '#008060', label: 'Strong' }
+  if (pct >= 40) return { text: 'text-shopify-warning-text', bar: '#FFC453', label: 'Fair' }
+  return { text: 'text-shopify-critical', bar: '#D72C0D', label: 'Weak' }
+}
+
+function TrustSignalCard({ label, count, total, description }) {
+  const pct = total > 0 ? Math.round((count / total) * 100) : 0
+  const cfg = signalColor(pct)
+  return (
+    <div className="bg-white rounded-card shadow-card p-5 fade-up">
+      <p className="text-xs font-medium text-shopify-secondary uppercase tracking-wide">{label}</p>
+      <div className="flex items-end gap-2 mt-2">
+        <span className={`text-3xl font-bold ${cfg.text}`}>{pct}%</span>
+        <span className={`text-xs font-medium mb-1 ${cfg.text}`}>{cfg.label}</span>
+      </div>
+      <p className="text-xs text-shopify-secondary mt-1">{count} of {total} products</p>
+      <div className="h-1.5 bg-shopify-border rounded-full mt-3">
+        <div
+          className="h-1.5 rounded-full transition-all duration-700"
+          style={{ width: `${pct}%`, backgroundColor: cfg.bar }}
+        />
+      </div>
+      <p className="text-xs text-shopify-secondary mt-2.5 leading-relaxed">{description}</p>
+    </div>
+  )
+}
+
 // ── Client-side issue detection (mirrors backend detect-issues.js) ──
 
 function textContainsAny(text, keywords) {
@@ -198,6 +243,62 @@ export default function Dashboard({ setView, storeData }) {
     return Object.values(counts).sort((a, b) => b.count - a.count)
   }, [scoredProducts])
 
+  // ── Perception derivations ──
+
+  const perceivedCategoryLabel = useMemo(() => {
+    const counts = {}
+    scoredProducts.forEach(p => {
+      const key = (p.product_type || '').trim() || p.category || 'general'
+      counts[key] = (counts[key] || 0) + 1
+    })
+    const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1])
+    if (sorted.length === 0) return 'general merchandise'
+    const top = sorted[0][0]
+    if (CATEGORY_LABELS[top]) return CATEGORY_LABELS[top]
+    if (!top || top === 'general') return 'general merchandise'
+    return top
+  }, [scoredProducts])
+
+  const recommendableCount = scoredProducts.filter(p => p.score >= 70).length
+  const recommendablePct = scoredProducts.length > 0
+    ? Math.round((recommendableCount / scoredProducts.length) * 100)
+    : 0
+
+  const queryCoverage = useMemo(() => {
+    const stopwords = ['with','best','good','most','product','complete','clear','detailed']
+    return STANDARD_QUERIES.map(q => {
+      const keywords = q.toLowerCase().split(/\s+/)
+        .filter(w => w.length > 3 && !stopwords.includes(w))
+      const surfacing = scoredProducts.filter(p => {
+        if (p.score < 70) return false
+        if (p.score >= 85) return true
+        const combined = `${p.name || ''} ${p.description || ''} ${(Array.isArray(p.tags) ? p.tags.join(' ') : (p.tags || ''))}`.toLowerCase()
+        return keywords.some(k => combined.includes(k))
+      })
+      return { query: q, count: surfacing.length, status: coverageStatus(surfacing.length) }
+    })
+  }, [scoredProducts])
+
+  const blindSpots = queryCoverage.filter(q => q.count === 0).length
+
+  const trustSignals = useMemo(() => {
+    const hasReturn = p => textContainsAny(p.description || '', ['return', 'refund', 'exchange', 'money back'])
+    const hasShipping = p => textContainsAny(p.description || '', ['shipping', 'delivery', 'dispatch', 'ships'])
+    const hasRichDesc = p => getWordCount(p.description || '') >= 60
+    const hasSpecs = p => textContainsAny(p.description || '', ['dimensions', 'weight', 'size', 'material', 'compatibility', 'specs', 'specification', 'ingredients', 'ingredient', 'nutrition'])
+    return {
+      returnPolicy: scoredProducts.filter(hasReturn).length,
+      shipping: scoredProducts.filter(hasShipping).length,
+      description: scoredProducts.filter(hasRichDesc).length,
+      specifications: scoredProducts.filter(hasSpecs).length,
+    }
+  }, [scoredProducts])
+
+  const storeStatus = avgScore >= 70 ? 'Strong AI visibility'
+    : avgScore >= 40 ? 'Partial AI visibility'
+    : 'Low AI visibility'
+  const storeStatusColor = avgScore >= 70 ? '#008060' : avgScore >= 40 ? '#FFC453' : '#D72C0D'
+
   const optTotal = optHistory.filter(h => h.status === 'applied').length
   const optThisWeek = useMemo(() => {
     const weekAgo = new Date()
@@ -302,6 +403,141 @@ export default function Dashboard({ setView, storeData }) {
           />
         </div>
       </div>
+
+      {/* ─── AI Perception summary ─── */}
+      {scoredProducts.length > 0 && (
+        <div className="bg-white rounded-card shadow-card p-6 fade-up relative overflow-hidden">
+          <div className="absolute top-0 left-0 right-0 h-1" style={{ backgroundColor: storeStatusColor }} />
+          <div className="flex items-start justify-between gap-6 flex-wrap">
+            <div className="flex-1 min-w-[280px]">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="w-2 h-2 rounded-full" style={{ backgroundColor: storeStatusColor }} />
+                <p className="text-xs font-semibold uppercase tracking-widest" style={{ color: storeStatusColor }}>
+                  How AI sees your store · {storeStatus}
+                </p>
+              </div>
+              <h2 className="text-lg font-semibold text-shopify-text leading-snug">
+                AI agents identify your store as a{' '}
+                <span className="text-shopify-green">{perceivedCategoryLabel}</span> store
+              </h2>
+              <p className="text-sm text-shopify-secondary mt-2 leading-relaxed">
+                They would confidently recommend <span className="font-semibold text-shopify-text">{recommendableCount}</span> of your <span className="font-semibold text-shopify-text">{scoredProducts.length}</span> products — that's <span className="font-semibold text-shopify-text">{recommendablePct}%</span> of your catalog surfacing in AI-generated answers.
+              </p>
+            </div>
+            <div className="flex gap-6 flex-wrap shrink-0">
+              <div className="min-w-[110px]">
+                <p className="text-xs font-medium text-shopify-secondary uppercase tracking-wide">Visibility</p>
+                <p className="text-3xl font-bold mt-1" style={{ color: storeStatusColor }}>
+                  {avgScore}<span className="text-lg text-shopify-secondary font-medium">/100</span>
+                </p>
+              </div>
+              <div className="min-w-[110px]">
+                <p className="text-xs font-medium text-shopify-secondary uppercase tracking-wide">Recommended</p>
+                <p className="text-3xl font-bold mt-1 text-shopify-text">
+                  {recommendablePct}<span className="text-lg text-shopify-secondary font-medium">%</span>
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Query Coverage Map ─── */}
+      {scoredProducts.length > 0 && (
+        <div className="bg-white rounded-card shadow-card fade-up">
+          <div className="px-5 py-4 border-b border-shopify-border flex items-center justify-between">
+            <div>
+              <h2 className="text-sm font-semibold text-shopify-text">Query Coverage Map</h2>
+              <p className="text-xs text-shopify-secondary mt-0.5">
+                What happens when AI agents get asked common shopping questions
+              </p>
+            </div>
+            {blindSpots > 0 && (
+              <span className="text-xs font-medium bg-shopify-critical-light text-shopify-critical px-2.5 py-1 rounded-full">
+                {blindSpots} blind spot{blindSpots !== 1 ? 's' : ''}
+              </span>
+            )}
+          </div>
+          <div className="divide-y divide-shopify-border">
+            {queryCoverage.map((q, i) => {
+              const isBlindSpot = q.count === 0
+              const barPct = Math.min(100, (q.count / Math.max(1, scoredProducts.length)) * 100)
+              return (
+                <div
+                  key={i}
+                  className={`px-5 py-3.5 ${isBlindSpot ? 'bg-shopify-critical-light/30' : ''}`}
+                >
+                  <div className="flex items-center justify-between gap-4 mb-2">
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                      <span
+                        className="w-1.5 h-1.5 rounded-full shrink-0"
+                        style={{ backgroundColor: q.status.color }}
+                      />
+                      <p className={`text-sm truncate ${isBlindSpot ? 'font-medium text-shopify-critical' : 'text-shopify-text'}`}>
+                        "{q.query}"
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-3 shrink-0">
+                      <span className="text-xs text-shopify-secondary whitespace-nowrap">
+                        {q.count} product{q.count !== 1 ? 's' : ''} surface
+                      </span>
+                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${q.status.pillBg} ${q.status.pillText}`}>
+                        {q.status.label}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="ml-3.5">
+                    <div className="h-1 bg-shopify-border rounded-full">
+                      <div
+                        className="h-1 rounded-full transition-all duration-700"
+                        style={{ width: `${barPct}%`, backgroundColor: q.status.color }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ─── Trust Signal Audit ─── */}
+      {scoredProducts.length > 0 && (
+        <div>
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <h2 className="text-sm font-semibold text-shopify-text">Trust Signal Audit</h2>
+              <p className="text-xs text-shopify-secondary mt-0.5">Key signals AI uses to evaluate trustworthiness</p>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <TrustSignalCard
+              label="Return Policy Coverage"
+              count={trustSignals.returnPolicy}
+              total={scoredProducts.length}
+              description="AI prioritizes products with clear return policies for trust-related queries."
+            />
+            <TrustSignalCard
+              label="Shipping Info Coverage"
+              count={trustSignals.shipping}
+              total={scoredProducts.length}
+              description="Shipping details help AI answer delivery-focused customer questions."
+            />
+            <TrustSignalCard
+              label="Description Quality"
+              count={trustSignals.description}
+              total={scoredProducts.length}
+              description="Descriptions with 60+ words give AI enough context to cite confidently."
+            />
+            <TrustSignalCard
+              label="Specification Coverage"
+              count={trustSignals.specifications}
+              total={scoredProducts.length}
+              description="Specs, ingredients, or dimensions help AI match specific customer needs."
+            />
+          </div>
+        </div>
+      )}
 
       {/* Issues + critical products row */}
       <div className="grid grid-cols-12 gap-4">

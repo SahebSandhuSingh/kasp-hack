@@ -5,7 +5,6 @@ import Dashboard from './components/Dashboard.jsx'
 import ProductTable from './components/ProductTable.jsx'
 import BeforeAfter from './components/BeforeAfter.jsx'
 import Simulate from './components/Simulate.jsx'
-import AIPerception from './components/AIPerception.jsx'
 import ActionPlan from './components/ActionPlan.jsx'
 
 export default function App() {
@@ -113,8 +112,6 @@ export default function App() {
         return <Dashboard setView={setView} setSelectedProduct={setSelectedProduct} storeData={storeData} />
       case 'products':
         return <ProductTable setView={setView} setSelectedProduct={setSelectedProduct} products={products} />
-      case 'perception':
-        return <AIPerception storeData={storeData} products={products} setView={setView} />
       case 'beforeafter':
         return <BeforeAfter selectedProduct={selectedProduct} storeData={storeData} setView={setView} products={products} />
       case 'actionplan':
