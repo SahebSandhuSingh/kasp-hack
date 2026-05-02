@@ -1052,10 +1052,21 @@ app.post('/api/products/revert', requireAuth, async (req, res) => {
 });
 
 // ──────────────────────────────────────────────
+// SERVE REACT FRONTEND (CATCH-ALL)
+// ──────────────────────────────────────────────
+app.use(express.static(path.join(__dirname, '../frontend/dist')));
+
+app.get('*', (req, res) => {
+  if (!req.path.startsWith('/api')) {
+    res.sendFile(path.join(__dirname, '../frontend/dist', 'index.html'));
+  }
+});
+
+// ──────────────────────────────────────────────
 // START
 // ──────────────────────────────────────────────
 app.listen(PORT, () => {
-  console.log(`\n🚀 AI Rep Optimizer backend running on http://localhost:${PORT}`);
+  console.log(`\n🚀 Visibly backend running on http://localhost:${PORT}`);
   console.log('   GET  /api/health');
   console.log('   GET  /api/audit');
   console.log('   POST /api/simulate');

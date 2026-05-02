@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { CATEGORY_LABELS, CATEGORY_COLORS } from '../categoryConstants'
 
 // Standard AI shopping queries (mirrors LIVE_QUERIES in backend/server.js)
@@ -173,7 +174,8 @@ function IssueBadge({ severity }) {
   )
 }
 
-export default function Dashboard({ setView, storeData }) {
+export default function Dashboard({ storeData }) {
+  const navigate = useNavigate()
   const [products, setProducts] = useState([])
   const [loading, setLoading] = useState(true)
   const [optHistory, setOptHistory] = useState([])
@@ -347,7 +349,7 @@ export default function Dashboard({ setView, storeData }) {
           </p>
         </div>
         <button
-          onClick={() => setView('products')}
+          onClick={() => navigate('/app/products')}
           className="bg-shopify-green hover:bg-shopify-green-dark text-white text-sm font-medium px-4 py-2 rounded-btn transition-colors"
         >
           Start Optimizing →
@@ -583,7 +585,7 @@ export default function Dashboard({ setView, storeData }) {
               Critical Products
             </h2>
             <button
-              onClick={() => setView('products')}
+              onClick={() => navigate('/app/products')}
               className="text-xs text-shopify-green font-medium hover:underline"
             >
               View all →
@@ -610,7 +612,7 @@ export default function Dashboard({ setView, storeData }) {
                     </p>
                   </div>
                   <button
-                    onClick={() => setView('beforeafter')}
+                    onClick={() => navigate(`/app/optimize?product_id=${p.id}`)}
                     className="text-xs font-medium text-shopify-green border border-shopify-green rounded-btn px-2.5 py-1 hover:bg-shopify-green-light transition-colors"
                   >
                     Fix now

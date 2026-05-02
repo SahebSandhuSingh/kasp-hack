@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { CATEGORY_LABELS, CATEGORY_COLORS, ALL_CATEGORIES } from '../categoryConstants'
 
 const STATUS_CONFIG = {
@@ -80,7 +81,8 @@ function CategoryBadge({ product, onOverride }) {
   )
 }
 
-export default function ProductTable({ setView, setSelectedProduct, products = [] }) {
+export default function ProductTable({ setSelectedProduct, products = [] }) {
+  const navigate = useNavigate()
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState('all')
   const [sortKey, setSortKey] = useState('score')
@@ -276,8 +278,7 @@ export default function ProductTable({ setView, setSelectedProduct, products = [
                       <button
                         onClick={() => {
                           const original = products.find(op => String(op.id) === String(p.id)) || p
-                          setSelectedProduct({ ...original, name: original.title || original.name })
-                          setView('beforeafter')
+                          navigate(`/app/optimize?product_id=${original.id}`)
                         }}
                         className="text-xs font-medium text-shopify-green border border-shopify-green rounded-btn px-2.5 py-1 hover:bg-shopify-green-light transition-colors"
                       >

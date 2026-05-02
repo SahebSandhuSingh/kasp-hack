@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { useSearchParams, useNavigate } from 'react-router-dom'
 import { CATEGORY_LABELS, CATEGORY_COLORS } from '../categoryConstants'
 
 // ──────────────────────────────────────────────
@@ -619,8 +620,25 @@ function HistoryTab({ storeData }) {
 // MAIN COMPONENT
 // ──────────────────────────────────────────────
 
-export default function BeforeAfter({ selectedProduct, storeData, setView, products = [] }) {
-  const product = selectedProduct || products[0] || {}
+export default function BeforeAfter({ selectedProduct, storeData, products = [] }) {
+  const [searchParams] = useSearchParams()
+  const navigate = useNavigate()
+  const productId = searchParams.get('product_id')
+
+  useEffect(() => {
+    if (productId && products.length > 0) {
+      // Not actually passing setSelectedProduct as prop in App.jsx currently
+      // Since it's passed as a prop from App.jsx, but we aren't managing the parent's state anymore for this?
+      // Wait, let me just override the product if search param is present
+    }
+  }, [productId, products])
+
+  // Let's use the productId from searchParams if available, otherwise selectedProduct, otherwise first product
+  const productToUse = productId
+    ? (products.find(p => String(p.id) === productId) || selectedProduct || products[0] || {})
+    : (selectedProduct || products[0] || {})
+
+  const product = productToUse
 
   const [tab, setTab] = useState('optimize') // 'optimize' | 'history'
   const [showModal, setShowModal] = useState(false)
@@ -638,7 +656,7 @@ export default function BeforeAfter({ selectedProduct, storeData, setView, produ
     setApplying(false)
     setApplyStep(0)
     setShowModal(false)
-  }, [product?.id])
+  }, [product.id])
 
   const productCat = product.category || 'general'
   const catColors = CATEGORY_COLORS[productCat] || CATEGORY_COLORS.general
@@ -902,7 +920,7 @@ export default function BeforeAfter({ selectedProduct, storeData, setView, produ
           scoreAfter={success.scoreAfter}
           appliedFields={success.appliedFields}
           shopifyUrl={shopifyUrl}
-          onOptimizeAnother={() => setView('products')}
+          onOptimizeAnother={() => navigate('/app/products')}
         />
       </div>
     )

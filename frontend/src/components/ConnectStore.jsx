@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 
 const CONNECT_STEPS = [
   'Verifying credentials...',
@@ -25,6 +26,7 @@ function Spinner() {
 }
 
 export default function ConnectStore({ onConnected, message }) {
+  const navigate = useNavigate()
   const [domain, setDomain] = useState('')
   const [clientId, setClientId] = useState('')
   const [clientSecret, setClientSecret] = useState('')
@@ -112,6 +114,7 @@ export default function ConnectStore({ onConnected, message }) {
           hasWriteAccess: data.scope_status?.has_write_products === true,
           warning: data.warning,
         })
+        navigate('/app/overview')
       }, 1000)
     } catch (err) {
       setApiError(err.message || 'Network error. Please try again.')
@@ -126,8 +129,8 @@ export default function ConnectStore({ onConnected, message }) {
       <div className="w-full max-w-[520px] fade-up">
         <div className="text-center mb-8">
           <div className="inline-flex items-center gap-2.5 mb-3">
-            <img src="/logo.png" alt="AI Rep Optimizer Logo" className="w-9 h-9 rounded-lg shadow-card object-cover" />
-            <span className="text-lg font-semibold text-shopify-text tracking-tight">AI Rep Optimizer</span>
+            <img src="/logo.png" alt="Visibly Logo" className="w-9 h-9 rounded-lg shadow-card object-cover" />
+            <span className="text-shopify-text tracking-tight" style={{ fontFamily: '"Dancing Script", cursive', fontSize: '26px', fontWeight: 700 }}>Visibly</span>
           </div>
           <p className="text-sm text-shopify-secondary">Optimize your products for AI-powered shopping</p>
         </div>

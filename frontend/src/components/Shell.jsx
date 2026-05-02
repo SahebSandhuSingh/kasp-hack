@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
+import { NavLink, useNavigate } from 'react-router-dom'
 
 // Clean inline SVG icons
 const icons = {
@@ -46,14 +47,14 @@ const icons = {
 }
 
 const NAV_ITEMS = [
-  { id: 'dashboard',   label: 'Overview',    icon: icons.overview },
-  { id: 'actionplan',  label: 'Action Plan', icon: icons.actionPlan },
-  { id: 'products',    label: 'Products',    icon: icons.products },
-  { id: 'beforeafter', label: 'Optimize',    icon: icons.optimize },
-  { id: 'simulate',    label: 'Simulate',    icon: icons.simulate },
+  { path: '/app/overview',   label: 'Overview',    icon: icons.overview },
+  { path: '/app/products',   label: 'Products',    icon: icons.products },
+  { path: '/app/optimize',   label: 'Optimize',    icon: icons.optimize },
+  { path: '/app/simulate',   label: 'Simulate',    icon: icons.simulate },
+  { path: '/app/analytics',  label: 'Analytics',   icon: icons.actionPlan },
 ]
 
-export default function Shell({ view, setView, storeData, onDisconnect, children }) {
+export default function Shell({ storeData, onDisconnect, children }) {
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
   const dropdownRef = useRef(null)
@@ -81,21 +82,21 @@ export default function Shell({ view, setView, storeData, onDisconnect, children
 
           {/* Brand */}
           <div className="flex items-center gap-3">
-            <img src="/logo.png" alt="AI Rep Optimizer Logo" className="w-7 h-7 rounded-md object-cover" />
-            <span className="font-semibold text-shopify-text text-sm tracking-tight">
-              AI Rep Optimizer
+            <img src="/logo.png" alt="Visibly Logo" className="w-7 h-7 rounded-md object-cover" />
+            <span className="text-shopify-text tracking-tight" style={{ fontFamily: '"Dancing Script", cursive', fontSize: '24px', fontWeight: 700 }}>
+              Visibly
             </span>
           </div>
 
           {/* Nav links */}
           <nav className="flex items-center gap-1">
             {NAV_ITEMS.map(item => (
-              <button
-                key={item.id}
-                onClick={() => setView(item.id)}
-                className={`
+              <NavLink
+                key={item.path}
+                to={item.path}
+                className={({ isActive }) => `
                   flex items-center gap-1.5 px-3 py-1.5 rounded-btn text-sm font-medium transition-all
-                  ${view === item.id
+                  ${isActive
                     ? 'bg-shopify-green-light text-shopify-green'
                     : 'text-shopify-secondary hover:bg-shopify-bg hover:text-shopify-text'
                   }
@@ -103,7 +104,7 @@ export default function Shell({ view, setView, storeData, onDisconnect, children
               >
                 {item.icon}
                 {item.label}
-              </button>
+              </NavLink>
             ))}
           </nav>
 

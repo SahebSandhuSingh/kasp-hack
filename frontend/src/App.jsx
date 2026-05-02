@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { Routes, Route, Navigate, useNavigate } from 'react-router-dom'
 import Shell from './components/Shell.jsx'
 import ConnectStore from './components/ConnectStore.jsx'
 import Dashboard from './components/Dashboard.jsx'
@@ -8,19 +9,50 @@ import Simulate from './components/Simulate.jsx'
 import ActionPlan from './components/ActionPlan.jsx'
 import LandingPage from './components/LandingPage.jsx'
 
+function AppLoadingScreen() {
+  return (
+    <div style={{
+      height: '100vh',
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      justifyContent: 'center',
+      background: '#F8F9FA',
+      gap: '16px'
+    }}>
+      <div style={{
+        width: 40, height: 40,
+        border: '3px solid #E5E7EB',
+        borderTop: '3px solid #008060',
+        borderRadius: '50%',
+        animation: 'spin 0.8s linear infinite'
+      }} />
+      <span style={{ color: '#4B5563', fontSize: 14 }}>
+        Loading Visibly...
+      </span>
+      <style>{`
+        @keyframes spin {
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
+    </div>
+  );
+}
+
 export default function App() {
-  const [view, setView] = useState('dashboard')
-  const [storeData, setStoreData] = useState(null) // null = not connected
+  const [connected, setConnected] = useState(null)
+  const [storeData, setStoreData] = useState(null)
   const [selectedProduct, setSelectedProduct] = useState(null)
   const [products, setProducts] = useState([])
-  const [checkingSession, setCheckingSession] = useState(true)
   const [sessionMessage, setSessionMessage] = useState(null)
-  const [showLanding, setShowLanding] = useState(true)
+
+  const navigate = useNavigate()
 
   useEffect(() => {
     fetch('/api/auth/session', { credentials: 'include' })
       .then(r => r.ok ? r.json() : { connected: false })
       .then(data => {
+        setConnected(data.connected)
         if (data.connected) {
           setStoreData({
             domain: data.shop.domain,
@@ -30,11 +62,9 @@ export default function App() {
             scopeStatus: data.scope_status,
             hasWriteAccess: data.has_write_access,
           })
-          setShowLanding(false)
         }
       })
-      .catch(() => setStoreData(null))
-      .finally(() => setCheckingSession(false))
+      .catch(() => setConnected(false))
   }, [])
 
   const handleSessionExpired = () => {
@@ -42,8 +72,8 @@ export default function App() {
     setSelectedProduct(null)
     setProducts([])
     setSessionMessage('Your session expired. Please reconnect your store.')
-    setView('dashboard')
-    setShowLanding(true)
+    setConnected(false)
+    navigate('/connect')
   }
 
   useEffect(() => {
@@ -66,19 +96,13 @@ export default function App() {
     return () => { delete window.__refreshProducts }
   }, [])
 
-  // Called when ConnectStore succeeds
   const handleConnected = (data) => {
     setStoreData(data)
     setSessionMessage(null)
-    setView('dashboard')
+    setConnected(true)
+    navigate('/app/overview')
   }
 
-  // Called when scope warning is dismissed in read-only mode
-  const handleContinueReadOnly = () => {
-    setView('dashboard')
-  }
-
-  // Called when user clicks "Disconnect store"
   const handleDisconnect = async () => {
     await fetch('/api/auth/disconnect', {
       method: 'POST',
@@ -87,53 +111,45 @@ export default function App() {
     setStoreData(null)
     setSelectedProduct(null)
     setProducts([])
-    setView('dashboard')
-    setShowLanding(true)
+    setConnected(false)
+    navigate('/connect')
   }
 
-  if (checkingSession) {
-    return (
-      <div className="min-h-screen bg-shopify-bg flex items-center justify-center">
-        <div className="flex flex-col items-center gap-3">
-          <img src="/logo.png" alt="AI Rep Optimizer Logo" className="w-10 h-10 rounded-lg shadow-card object-cover" />
-          <svg className="animate-spin w-7 h-7 text-shopify-green" viewBox="0 0 24 24" fill="none">
-            <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeOpacity="0.3"/>
-            <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round"/>
-          </svg>
-          <p className="text-sm font-semibold text-shopify-text">AI Rep Optimizer</p>
-        </div>
-      </div>
-    )
-  }
-
-  // If no store connected, show the landing page first, then the onboarding screen (no Shell)
-  if (!storeData) {
-    if (showLanding) {
-      return <LandingPage onGetStarted={() => setShowLanding(false)} />
-    }
-    return <ConnectStore onConnected={handleConnected} message={sessionMessage} />
-  }
-
-  const renderView = () => {
-    switch (view) {
-      case 'dashboard':
-        return <Dashboard setView={setView} setSelectedProduct={setSelectedProduct} storeData={storeData} />
-      case 'products':
-        return <ProductTable setView={setView} setSelectedProduct={setSelectedProduct} products={products} />
-      case 'beforeafter':
-        return <BeforeAfter selectedProduct={selectedProduct} storeData={storeData} setView={setView} products={products} />
-      case 'actionplan':
-        return <ActionPlan storeData={storeData} products={products} setView={setView} setSelectedProduct={setSelectedProduct} />
-      case 'simulate':
-        return <Simulate products={products} />
-      default:
-        return <Dashboard setView={setView} setSelectedProduct={setSelectedProduct} />
-    }
-  }
+  if (connected === null) return <AppLoadingScreen />;
 
   return (
-    <Shell view={view} setView={setView} storeData={storeData} onDisconnect={handleDisconnect}>
-      {renderView()}
-    </Shell>
+    <Routes>
+      <Route path="/" element={<LandingPage />} />
+      <Route
+        path="/connect"
+        element={
+          connected
+            ? <Navigate to="/app/overview" replace />
+            : <ConnectStore onConnected={handleConnected} message={sessionMessage} />
+        }
+      />
+      <Route
+        path="/app/*"
+        element={
+          connected
+            ? (
+              <Shell storeData={storeData} onDisconnect={handleDisconnect}>
+                <Routes>
+                  <Route index element={<Navigate to="overview" replace />} />
+                  <Route path="overview" element={<Dashboard storeData={storeData} setSelectedProduct={setSelectedProduct} />} />
+                  <Route path="products" element={<ProductTable products={products} setSelectedProduct={setSelectedProduct} />} />
+                  <Route path="optimize" element={<BeforeAfter products={products} selectedProduct={selectedProduct} storeData={storeData} />} />
+                  <Route path="simulate" element={<Simulate products={products} />} />
+                  <Route path="analytics" element={<ActionPlan products={products} storeData={storeData} setSelectedProduct={setSelectedProduct} />} />
+                  <Route path="*" element={<Navigate to="overview" replace />} />
+                </Routes>
+              </Shell>
+            )
+            : <Navigate to="/connect" replace />
+        }
+      />
+      {/* Catch-all */}
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
   )
 }

@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-
+import { useNavigate } from 'react-router-dom'
 // ── Helpers ──────────────────────────────────────
 
 function statusOf(score) {
@@ -29,8 +29,9 @@ function severityConfig(sev) {
 
 // ── Main component ───────────────────────────────
 
-export default function ActionPlan({ storeData, products = [], setView, setSelectedProduct }) {
+export default function ActionPlan({ storeData, products = [], setSelectedProduct }) {
   const storeName = storeData?.domain || 'your store'
+  const navigate = useNavigate()
 
   // Normalize and calculate
   const { normalized, avgScore, totalIssues, totalProducts } = useMemo(() => {
@@ -95,7 +96,7 @@ export default function ActionPlan({ storeData, products = [], setView, setSelec
         severity: fix.severity,
       }))
     } catch {}
-    setView && setView('products')
+    navigate('/app/products')
   }
 
   // ── SECTION 3: Quick Wins (55-69) ──
@@ -107,10 +108,9 @@ export default function ActionPlan({ storeData, products = [], setView, setSelec
   }, [normalized])
 
   const handleFixNow = (product) => {
-    if (setSelectedProduct) {
-      setSelectedProduct({ ...product.raw, name: product.title, id: product.id })
-    }
-    setView && setView('beforeafter')
+    // If setSelectedProduct is available, we could update parent state,
+    // but the URL will be the single source of truth for before/after.
+    navigate(`/app/optimize?product_id=${product.id}`)
   }
 
   // ── SECTION 4: Store Health Trend ──
