@@ -406,6 +406,12 @@ export default function Dashboard({ setView, storeData }) {
 
       {/* ─── AI Perception summary ─── */}
       {scoredProducts.length > 0 && (
+        <div className="pt-2">
+          <h2 className="text-xl font-semibold text-shopify-text">AI Perception</h2>
+        </div>
+      )}
+
+      {scoredProducts.length > 0 && (
         <div className="bg-white rounded-card shadow-card p-6 fade-up relative overflow-hidden">
           <div className="absolute top-0 left-0 right-0 h-1" style={{ backgroundColor: storeStatusColor }} />
           <div className="flex items-start justify-between gap-6 flex-wrap">
