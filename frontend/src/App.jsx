@@ -6,6 +6,7 @@ import ProductTable from './components/ProductTable.jsx'
 import BeforeAfter from './components/BeforeAfter.jsx'
 import Simulate from './components/Simulate.jsx'
 import ActionPlan from './components/ActionPlan.jsx'
+import LandingPage from './components/LandingPage.jsx'
 
 export default function App() {
   const [view, setView] = useState('dashboard')
@@ -14,6 +15,7 @@ export default function App() {
   const [products, setProducts] = useState([])
   const [checkingSession, setCheckingSession] = useState(true)
   const [sessionMessage, setSessionMessage] = useState(null)
+  const [showLanding, setShowLanding] = useState(true)
 
   useEffect(() => {
     fetch('/api/auth/session', { credentials: 'include' })
@@ -28,6 +30,7 @@ export default function App() {
             scopeStatus: data.scope_status,
             hasWriteAccess: data.has_write_access,
           })
+          setShowLanding(false)
         }
       })
       .catch(() => setStoreData(null))
@@ -40,6 +43,7 @@ export default function App() {
     setProducts([])
     setSessionMessage('Your session expired. Please reconnect your store.')
     setView('dashboard')
+    setShowLanding(true)
   }
 
   useEffect(() => {
@@ -84,6 +88,7 @@ export default function App() {
     setSelectedProduct(null)
     setProducts([])
     setView('dashboard')
+    setShowLanding(true)
   }
 
   if (checkingSession) {
@@ -101,8 +106,11 @@ export default function App() {
     )
   }
 
-  // If no store connected, show the onboarding screen (no Shell)
+  // If no store connected, show the landing page first, then the onboarding screen (no Shell)
   if (!storeData) {
+    if (showLanding) {
+      return <LandingPage onGetStarted={() => setShowLanding(false)} />
+    }
     return <ConnectStore onConnected={handleConnected} message={sessionMessage} />
   }
 

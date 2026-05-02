@@ -1,10 +1,10 @@
 import { useState } from 'react'
 
 const SIMULATE_QUERIES = [
-  'best product with free returns',
-  'affordable product under ₹500',
-  'product with good reviews and fast shipping',
-  'premium product with detailed information',
+  'best snowboard for beginners',
+  'high protein snack under ₹500',
+  'winter sports gift under ₹1000',
+  'professional grade ski equipment',
 ]
 
 // Deterministic scoring — assigns match score based on product data quality

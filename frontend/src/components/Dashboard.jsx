@@ -3,13 +3,13 @@ import { CATEGORY_LABELS, CATEGORY_COLORS } from '../categoryConstants'
 
 // Standard AI shopping queries (mirrors LIVE_QUERIES in backend/server.js)
 const STANDARD_QUERIES = [
-  'best product with free returns and clear description',
-  'highly rated product with strong customer reviews',
-  'product with fast free shipping',
-  'most trusted product with detailed information',
-  'best value product with clear pricing',
-  'product with detailed ingredients or specifications',
-  'best overall product with complete information',
+  'best beginner snowboard under ₹50000',
+  'lightweight everyday t-shirt for men',
+  'high protein low sugar snack bar',
+  'professional ski accessories for advanced riders',
+  'affordable gift for someone who loves winter sports',
+  'complete snowboard setup for intermediate riders',
+  'best value sports equipment for outdoor activities',
 ]
 
 function coverageStatus(count) {
