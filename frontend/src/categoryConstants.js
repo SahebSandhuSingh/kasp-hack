@@ -28,3 +28,25 @@ export const CATEGORY_COLORS = {
 }
 
 export const ALL_CATEGORIES = Object.keys(CATEGORY_LABELS)
+
+export function scoreToAICitationProbability(score, isPrediction = false) {
+  let probability;
+  if (score <= 10) probability = Math.round(score * 0.5);
+  else if (score <= 30) probability = Math.round(5 + (score - 10) * 1);
+  else if (score <= 50) probability = Math.round(25 + (score - 30) * 1.5);
+  else if (score <= 70) probability = Math.round(55 + (score - 50) * 1.5);
+  else if (score <= 85) probability = Math.round(85 + (score - 70) * 0.8);
+  else probability = Math.round(97 + (score - 85) * 0.2);
+
+  if (isPrediction) {
+    probability = Math.min(91, Math.max(1, probability));
+  } else {
+    probability = Math.min(99, Math.max(1, probability));
+  }
+
+  return {
+    probability,
+    display: `${probability}%`,
+    raw_score: score
+  };
+}

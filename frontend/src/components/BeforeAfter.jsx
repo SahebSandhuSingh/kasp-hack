@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
-import { CATEGORY_LABELS, CATEGORY_COLORS } from '../categoryConstants'
+import { CATEGORY_LABELS, CATEGORY_COLORS, scoreToAICitationProbability } from '../categoryConstants'
 
 // ──────────────────────────────────────────────
 // CATEGORY-AWARE SUB-COMPONENTS
@@ -201,14 +201,17 @@ function FieldRow({ label, oldVal, newVal }) {
 function ScoreUpgrade({ before, after }) {
   const safeBefore = isNaN(before) ? 0 : before
   const safeAfter  = isNaN(after)  ? 0 : after
-  const delta = safeAfter - safeBefore
+  
+  const beforeProb = scoreToAICitationProbability(safeBefore, false).probability
+  const afterProb = scoreToAICitationProbability(safeAfter, true).probability
+  const delta = afterProb - beforeProb
 
   return (
     <div className="bg-shopify-success-light rounded-card px-6 py-4 border border-shopify-green/20">
       <div className="flex items-center gap-4">
         <div className="text-center">
           <p className="text-xs text-shopify-secondary mb-1">Current Probability</p>
-          <span className="text-3xl font-bold text-shopify-critical">{safeBefore}%</span>
+          <span className="text-3xl font-bold text-shopify-critical">{beforeProb}%</span>
         </div>
         <div className="flex-1 text-center">
           <div className="flex items-center justify-center gap-1 text-shopify-green">
@@ -222,7 +225,7 @@ function ScoreUpgrade({ before, after }) {
         </div>
         <div className="text-center">
           <p className="text-xs text-shopify-secondary mb-1">Est. Probability</p>
-          <span className="text-3xl font-bold text-shopify-green">~{safeAfter}%</span>
+          <span className="text-3xl font-bold text-shopify-green">~{afterProb}%</span>
         </div>
       </div>
       <p className="text-[10px] text-shopify-secondary mt-2 text-center">Citation probability is an estimate based on listing completeness. Actual AI citation depends on query context, competition, and model behavior.</p>
@@ -798,8 +801,8 @@ export default function BeforeAfter({ selectedProduct, storeData, products = [] 
     return sum + v.max_points
   }, 0)
   const currentScore = isNaN(product.score) ? 0 : product.score
-  const effectiveGain = hasContent ? Math.round(fixablePoints * 0.7) : 0
-  const projectedScore = Math.min(currentScore + effectiveGain, 92)
+  const realisticGain = hasContent ? Math.round(fixablePoints * 0.85) : 0
+  const projectedScore = Math.max(currentScore, Math.min(currentScore + realisticGain, 85))
 
   // Build change list for modal
   const changeList = []

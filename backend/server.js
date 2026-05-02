@@ -10,7 +10,7 @@ const { detectIssues } = require('./detect-issues');
 const { runCounterfactual } = require('./counterfactual');
 const db = require('./db');
 const { scoreProduct, fetchAndScoreProducts, fetchSalesData, today } = require('./shopifyDataService');
-const { detectCategory, getRubric, CATEGORY_LABELS } = require('./categoryEngine');
+const { detectCategory, getRubric, CATEGORY_LABELS, scoreToAICitationProbability } = require('./categoryEngine');
 
 const app = express();
 const PORT = 3001;
@@ -887,6 +887,7 @@ app.put('/api/products/apply-optimization', requireAuth, async (req, res) => {
       success: true,
       product_id,
       new_score: newScore,
+      new_citation: scoreToAICitationProbability(newScore, false),
       score_delta: scoreDelta,
       applied_fields: appliedFields
     });

@@ -50,9 +50,9 @@ export default function ActionPlan({ storeData, products = [], setSelectedProduc
     return { normalized: norm, avgScore: avg, totalIssues: issuesSum, totalProducts: total }
   }, [products])
 
-  // ── SECTION 1: Impact Summary ──
-  // Projected = current avg + (fixable issues * 4), capped at 100
-  const projectedScore = Math.min(100, avgScore + totalIssues * 4)
+  // Projected = current avg + (fixable issues * 4), capped at 85, with realism factor
+  const realisticGain = Math.round((totalIssues * 4) * 0.85)
+  const projectedScore = Math.max(avgScore, Math.min(85, avgScore + realisticGain))
   const scoreGain = projectedScore - avgScore
   const productsWithIssues = normalized.filter(p => p.issues.length > 0).length
 

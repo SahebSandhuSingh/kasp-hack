@@ -13,6 +13,7 @@
 const path = require('path');
 require('dotenv').config({ path: path.resolve(__dirname, '..', '.env') });
 const axios = require('axios');
+const { scoreProduct, scoreToAICitationProbability } = require('./categoryEngine');
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const OPENAI_URL = 'https://api.openai.com/v1/chat/completions';
@@ -138,6 +139,15 @@ async function runCounterfactual(product, fixes, query) {
       would_include: after.would_include,
       confidence: after.confidence || 0,
       reason: after.reason || '',
+      after_score: scoreProduct(patched).score > scoreProduct(product).score 
+        ? Math.max(scoreProduct(product).score, Math.min(85, scoreProduct(patched).score)) 
+        : scoreProduct(patched).score,
+      after_citation: scoreToAICitationProbability(
+        scoreProduct(patched).score > scoreProduct(product).score 
+          ? Math.max(scoreProduct(product).score, Math.min(85, scoreProduct(patched).score)) 
+          : scoreProduct(patched).score, 
+        true
+      )
     },
     delta: parseFloat(delta.toFixed(3)),
     fix_applied,

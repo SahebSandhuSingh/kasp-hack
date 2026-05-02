@@ -48,10 +48,10 @@ const icons = {
 
 const NAV_ITEMS = [
   { path: '/app/overview',   label: 'Overview',    icon: icons.overview },
+  { path: '/app/analytics',  label: 'Action Plan', icon: icons.actionPlan },
   { path: '/app/products',   label: 'Products',    icon: icons.products },
   { path: '/app/optimize',   label: 'Optimize',    icon: icons.optimize },
   { path: '/app/simulate',   label: 'Simulate',    icon: icons.simulate },
-  { path: '/app/analytics',  label: 'Analytics',   icon: icons.actionPlan },
 ]
 
 export default function Shell({ storeData, onDisconnect, children }) {
