@@ -1,12 +1,12 @@
-# Product Document — AI Representation Optimizer
+# Product Document — Visibly
 
 ## The Problem
 
-When a merchant spends years perfecting their Shopify store — writing descriptions, setting prices, building their catalogue — they assume the world can find them. And for a long time, that was mostly true. SEO tools told them how Google saw their store. They could fix it.
+When a merchant spends years building their Shopify store, they assume the world can find them. For a long time, that was mostly true. Google Search Console told them how Google saw their store. They could fix it.
 
-That world is changing. AI shopping agents — the kind embedded in ChatGPT, Perplexity, and a growing number of consumer apps — are becoming a primary product discovery layer. When a buyer asks "what's the best protein supplement for post-workout recovery under ₹2000," an AI agent doesn't crawl Google. It reasons across the product data it has access to: descriptions, policies, specifications, reviews, structured metadata.
+That world is changing. AI shopping agents - embedded in ChatGPT, Perplexity, and a growing number of consumer apps - are becoming how people discover products. When a buyer asks "what's the best protein supplement for post-workout recovery," an AI agent doesn't crawl Google. It reasons about the product data it can access: descriptions, policies, specifications, reviews.
 
-If a merchant's product data is incomplete, ambiguous, or contradictory, the AI agent doesn't flag it as broken. It simply skips it. The merchant never knows. There is no error message. There is no Search Console equivalent for AI visibility. The product is just quietly invisible.
+If that data is incomplete or vague, the AI doesn't flag it. It simply skips the product. The merchant never knows. There's no error message. No Search Console equivalent. The product is just quietly invisible.
 
 That is the problem this tool is built to solve.
 
@@ -14,47 +14,58 @@ That is the problem this tool is built to solve.
 
 ## Who This Is For
 
-A Shopify merchant who has already invested in building a store and wants to understand why their products might be underperforming in AI-driven discovery channels. Today, when a merchant suspects their products aren't showing up in AI-driven searches, they have no tool to investigate. They can check Google Search Console for SEO. They can run A/B tests on their storefront. But for AI visibility, they have nothing — no diagnostic, no score, no actionable signal. They either guess, or they don't know the problem exists at all. They need a diagnostic that speaks their language: "your product description doesn't have enough information for an AI to confidently recommend this to a buyer researching value-for-money options."
+A Shopify merchant who has invested in building a store and wants to understand why their products might be underperforming in AI-driven discovery. Today, when sales quietly drop and a merchant suspects AI agents might be the cause, they have nothing to investigate with. They'll rewrite descriptions manually, run more ads, tweak their SEO - and never once think to check whether ChatGPT would even recommend their product in the first place. They can check Google Search Console for SEO. But for AI visibility, there's no tool - no diagnostic, no score, no signal. They either guess, or they don't know the problem exists at all.
 
 ---
 
 ## What We Built
 
-We built a merchant-facing diagnostic tool that simulates how an AI shopping agent perceives and ranks each product in a Shopify store — and tells the merchant exactly what to fix, and why.
+A merchant-facing tool that connects to a live Shopify store, simulates how AI shopping agents evaluate each product, and tells the merchant exactly what to fix - then applies those fixes directly to their store.
 
-The core user journey is:
+The journey looks like this:
 
-A merchant connects their Shopify store. The system analyses the store's product catalogue and identifies the target buyer persona — who is actually shopping here, what they care about, what sophistication level they bring to their searches. From that persona, it generates 7 calibrated buyer queries per product — not generic searches, but the specific ways this store's actual buyer would phrase a search intent. It then simulates, for each query, whether an AI shopping agent would include or exclude that product, and why.
+A merchant enters their store URL. The system fetches their live product catalogue and runs 7 real buyer-intent queries against it - the kind of searches actual customers make, like "best beginner snowboard under ₹50000" or "high protein low sugar snack bar." For each query, it simulates whether an AI agent would recommend that product and why.
 
-Before flagging anything as broken, the system runs a fairness check: is this exclusion actually a problem, or is the product genuinely not the right fit for that query? Only incorrect exclusions — cases where the product belongs but the data is too weak to surface it — trigger fix recommendations. Those fixes are field-level and specific: not "improve your description" but "your description doesn't mention return policy, which is a high-confidence exclusion trigger for price-sensitive buyers." The system then applies the fix to a copy of the product and re-runs the simulation to show the merchant a before/after score. Proof, not promises.
+Before flagging anything as broken, the system runs a fairness check: is this exclusion actually a problem, or is the product genuinely not the right fit for that query? Only real gaps - cases where the product belongs but the data is too weak to surface it - trigger fix recommendations. Those fixes are specific: not "improve your description" but "your description doesn't mention return policy, which causes AI agents to skip this product for price-sensitive buyers."
+
+The merchant can then apply those fixes directly to their Shopify store with one click. The system re-runs the simulation and shows a before/after score - not a promise, actual proof.
 
 ---
 
 ## Key Product Decisions
 
 **Simulation-first, not analytics-first.**
-The obvious approach to this problem is to build a scanner — check word count, check for keywords, check readability scores. We chose not to do this because it solves the wrong problem. AI agents don't rank products by keyword density. They reason about context, buyer intent, and information completeness. A scanner would tell a merchant to add more words. Our system tells them which specific information gap is causing an AI agent to lose confidence in a product recommendation. That required building a simulation, not a scanner.
+The obvious approach is to build a scanner - check word count, flag missing keywords. We didn't because it solves the wrong problem. AI agents reason about context and buyer intent, not keyword density. A scanner tells a merchant to add more words. Our system tells them which specific gap is causing an AI agent to lose confidence. That required simulation.
 
-**Persona extraction runs once per store, not per product.**
-Early in the design we considered extracting a buyer persona for each individual product. We rejected this because it creates fragmented, inconsistent audits — the same store would produce different personas for different products, making cross-product comparisons meaningless. A store has one buyer type. The persona is a property of the store, not of individual products.
+**Buyer-intent queries, not policy-focused queries.**
+Early versions tested products against queries like "product with free returns and clear description." We replaced these with real buyer searches like "best beginner snowboard" because that's how actual customers search. Return policies matter - but they're signals AI uses to evaluate products for real queries, not queries themselves.
 
-**The fairness checker (Step 3) before fix recommendations.**
-This was the most important product decision we made. Without it, the system would flag every low-scoring product as broken and generate fix recommendations for all of them. But many exclusions are correct — a budget product genuinely shouldn't be recommended in a search for premium professional-grade equipment. Generating fixes for correct exclusions would create noise, erode merchant trust, and ultimately make the tool useless. The fairness checker separates signal from noise before any fix is generated.
+**The fairness checker before fix recommendations.**
+This was the most important decision we made. Without it, every low-scoring product gets flagged as broken. But many exclusions are correct - a budget product genuinely shouldn't show up in a search for premium professional equipment. Generating fixes for correct exclusions creates noise and erodes merchant trust. The fairness checker separates signal from noise before any fix is generated.
 
-**7 queries per product.**
-This number covers all 4 purchase intents — research, compare, buy, problem-solving — with enough variation to produce a statistically meaningful inclusion rate. Fewer than 5 queries produces scores that are too sensitive to a single bad query. More than 10 produces diminishing signal while significantly increasing API cost and latency.
+**Issue detection runs in code, not AI.**
+Checking whether a product has a return policy doesn't require intelligence - it requires checking if the word "return" appears in the description. We made all 6 issue checks deterministic code. This makes detection fast, consistent, and explainable. AI handles reasoning. Code handles pattern matching.
+
+**Write-back to Shopify.**
+Most audit tools stop at recommendations. Ours applies them. When a merchant clicks Apply, the fix writes directly to their Shopify product via the API. The before/after comparison then re-runs the simulation on the updated product to show the real score change. This closes the loop from diagnosis to proof.
 
 ---
 
 ## What We Chose NOT to Build
 
-**Competitor benchmarking.** Knowing that a competitor's product scores 80% while yours scores 40% is useful context, but it requires scraping competitor stores — a scope that would triple the complexity and introduce reliability issues. We chose to focus on making the audit itself accurate before adding comparison features.
+**Competitor benchmarking.** Useful context, but requires scraping competitor stores - a scope that would triple complexity without improving audit accuracy. Cut for v1.
 
-**Persistent storage and user accounts.** For v1, every audit is stateless — run it, get results, done. Adding persistence would mean building authentication, a database layer, and a results history UI. None of that improves the quality of the audit itself. We cut it to stay focused on what matters: audit accuracy.
+**Persistent user accounts.** Every audit is stateless - connect, audit, done. Adding authentication and a database layer doesn't improve the quality of what the tool actually does. Cut to stay focused.
+
+**Multi-store support.** Deliberately single-store per session. A focused audit on one store is more actionable than a scattered view across many.
+
+Every cut was made against one constraint: does this improve the quality of the audit itself? If not, it didn't ship.
 
 ---
 
 ## Tradeoffs We Encountered
 
-The hardest tradeoff was between audit speed and audit reliability. Running queries through an LLM produces reasoning — it can explain why a product was excluded, which is far more useful than a score. But LLMs are non-deterministic: the same query on the same product can produce different results on different runs. We resolved this with a majority vote system — each query runs twice, and if the results disagree, a tiebreaker run is added. This adds latency but makes the audit trustworthy. A score that randomly changes by 28% between runs is not a product — it's noise.
+The hardest tradeoff was between speed and reliability. LLMs are non-deterministic - the same query on the same product can produce different results on different runs. A score that randomly shifts by 28% between audits isn't useful. We resolved this with a majority vote system: each query runs twice, and if results disagree, a tiebreaker call decides. This adds some latency but makes the audit trustworthy.
+
+The second was between flexibility and trust. We initially considered running all issue detection through the AI for maximum flexibility. But a merchant who sees "missing return policy" flagged needs to trust that flag - not wonder if the AI was having an off day. Deterministic checks don't have off days. We traded flexibility for reliability where reliability matters more.
 
