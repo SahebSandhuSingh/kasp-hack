@@ -26,6 +26,12 @@ const icons = {
       <path d="M10.5 10.5L14 14"/>
     </svg>
   ),
+  perception: (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M1.5 8s2.5-5 6.5-5 6.5 5 6.5 5-2.5 5-6.5 5-6.5-5-6.5-5z"/>
+      <circle cx="8" cy="8" r="2"/>
+    </svg>
+  ),
   analytics: (
     <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
       <path d="M14 14H2V2"/>
@@ -35,6 +41,13 @@ const icons = {
   chevronDown: (
     <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
       <path d="M3 4.5L6 7.5L9 4.5"/>
+    </svg>
+  ),
+  actionPlan: (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="2" width="10" height="12" rx="1.5"/>
+      <path d="M6 2v1.5h4V2"/>
+      <path d="M6 8l1.5 1.5L10 7"/>
     </svg>
   ),
   logout: (
@@ -47,7 +60,9 @@ const icons = {
 const NAV_ITEMS = [
   { id: 'dashboard',   label: 'Overview',  icon: icons.overview },
   { id: 'products',    label: 'Products',  icon: icons.products },
+  { id: 'perception',  label: 'Perception', icon: icons.perception },
   { id: 'beforeafter', label: 'Optimize',  icon: icons.optimize },
+  { id: 'actionplan',  label: 'Action Plan', icon: icons.actionPlan },
   { id: 'simulate',    label: 'Simulate',  icon: icons.simulate },
 ]
 
