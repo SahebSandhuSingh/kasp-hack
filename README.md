@@ -29,6 +29,12 @@ Visibly gives Shopify merchants clear, data-driven visibility into why their pro
 - **Simulate Custom Queries** to see what products surface when customers search using AI.
 
 ---
+## 🎥 Product Demo
+
+We've recorded a full walkthrough of Visibly in action. See how merchants connect their store, uncover AI visibility gaps, and apply one-click optimisations to their live catalogue.
+
+**[Watch the Visibly Demo Video](https://drive.google.com/drive/folders/1hnrRVd9-MgNjZWYqYlBcOcB646kUqqrF?usp=sharing)**
+
 
 ## 🚀 Quick Setup Guide
 

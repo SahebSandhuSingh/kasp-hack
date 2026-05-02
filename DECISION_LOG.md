@@ -79,7 +79,7 @@ This decision directly maps to the track requirement: "not just a technical scan
 ### 3.7 — Why the 92 score ceiling and 91% citation cap exist
 
 - **What we chose:** Hard caps. No product can score above 92/100. Citation probability is permanently capped at 91%.
-- **What we considered:** Allowing scores to reach 100/100 and probability to reach 99% if a product satisfies all rubric criteria.
+- **What we had considered:** Allowing scores to reach 100/100 and probability to reach 99% if a product satisfies all rubric criteria.
 - **Why we chose it:** This is a deliberate trust decision, not a technical constraint. In the real world of LLM-based retrieval, no product listing is ever guaranteed to be cited for every relevant query. Showing a merchant "100% citation probability" creates a false certainty that the system cannot back up - and when that product is still skipped for some queries (which it will be), the merchant loses trust in the entire tool. The ceiling aligns expectations with the probabilistic reality of LLM inference. A score of 92 means the listing is excellent. It does not mean the problem is solved.
 
 ### 3.8 — Why prediction scores use a realism discount
