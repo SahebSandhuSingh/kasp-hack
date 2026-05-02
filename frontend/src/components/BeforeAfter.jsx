@@ -203,25 +203,28 @@ function ScoreUpgrade({ before, after }) {
   const delta = safeAfter - safeBefore
 
   return (
-    <div className="flex items-center gap-4 bg-shopify-success-light rounded-card px-6 py-4 border border-shopify-green/20">
-      <div className="text-center">
-        <p className="text-xs text-shopify-secondary mb-1">Current Score</p>
-        <span className="text-3xl font-bold text-shopify-critical">{safeBefore}</span>
-      </div>
-      <div className="flex-1 text-center">
-        <div className="flex items-center justify-center gap-1 text-shopify-green">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/>
-            <polyline points="17 6 23 6 23 12"/>
-          </svg>
-          <span className="text-lg font-bold">{delta >= 0 ? '+' : ''}{delta}</span>
+    <div className="bg-shopify-success-light rounded-card px-6 py-4 border border-shopify-green/20">
+      <div className="flex items-center gap-4">
+        <div className="text-center">
+          <p className="text-xs text-shopify-secondary mb-1">Current Probability</p>
+          <span className="text-3xl font-bold text-shopify-critical">{safeBefore}%</span>
         </div>
-        <p className="text-xs text-shopify-secondary">projected improvement</p>
+        <div className="flex-1 text-center">
+          <div className="flex items-center justify-center gap-1 text-shopify-green">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/>
+              <polyline points="17 6 23 6 23 12"/>
+            </svg>
+            <span className="text-lg font-bold">up to +{Math.max(delta, 0)}</span>
+          </div>
+          <p className="text-xs text-shopify-secondary">estimated improvement</p>
+        </div>
+        <div className="text-center">
+          <p className="text-xs text-shopify-secondary mb-1">Est. Probability</p>
+          <span className="text-3xl font-bold text-shopify-green">~{safeAfter}%</span>
+        </div>
       </div>
-      <div className="text-center">
-        <p className="text-xs text-shopify-secondary mb-1">Projected Score</p>
-        <span className="text-3xl font-bold text-shopify-green">{safeAfter}</span>
-      </div>
+      <p className="text-[10px] text-shopify-secondary mt-2 text-center">Citation probability is an estimate based on listing completeness. Actual AI citation depends on query context, competition, and model behavior.</p>
     </div>
   )
 }
@@ -366,7 +369,7 @@ function SuccessView({ product, scoreBefore, scoreAfter, appliedFields, shopifyU
           Changes applied to your Shopify store!
         </h2>
         <p className="text-sm text-shopify-secondary">
-          {product.name} has been updated successfully.
+          {product.name} has been updated. Citation probability may take time to reflect as AI models re-index your listing.
         </p>
       </div>
 
@@ -375,7 +378,7 @@ function SuccessView({ product, scoreBefore, scoreAfter, appliedFields, shopifyU
         <div className="flex items-center justify-center gap-6">
           <div className="text-center">
             <p className="text-xs text-shopify-secondary mb-1">Before</p>
-            <span className="text-3xl font-bold text-shopify-secondary">{scoreBefore}</span>
+            <span className="text-3xl font-bold text-shopify-secondary">{scoreBefore}%</span>
           </div>
           <div className="text-center">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#008060" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -385,11 +388,11 @@ function SuccessView({ product, scoreBefore, scoreAfter, appliedFields, shopifyU
           </div>
           <div className="text-center">
             <p className="text-xs text-shopify-secondary mb-1">After</p>
-            <span className="text-3xl font-bold text-shopify-green"><AnimatedScore target={scoreAfter} /></span>
+            <span className="text-3xl font-bold text-shopify-green">~<AnimatedScore target={scoreAfter} />%</span>
           </div>
           <div className="text-center bg-shopify-success-light px-4 py-2 rounded-card border border-shopify-green/20">
             <span className="text-lg font-bold text-shopify-green">
-              {delta >= 0 ? '+' : ''}{delta} points
+              {delta >= 0 ? '+' : ''}{delta}%
             </span>
           </div>
         </div>
@@ -627,11 +630,20 @@ export default function BeforeAfter({ selectedProduct, storeData, setView, produ
   const [success, setSuccess] = useState(null) // { scoreBefore, scoreAfter, appliedFields }
   const [error, setError] = useState(null)
 
+  // Reset state when the selected product changes so stale success/error views
+  // from a previous product don't carry over.
+  useEffect(() => {
+    setSuccess(null)
+    setError(null)
+    setApplying(false)
+    setApplyStep(0)
+    setShowModal(false)
+  }, [product?.id])
+
   const productCat = product.category || 'general'
   const catColors = CATEGORY_COLORS[productCat] || CATEGORY_COLORS.general
   const catLabel = CATEGORY_LABELS[productCat] || 'General'
 
-  const projectedScore = Math.min(95, (isNaN(product.score) ? 0 : product.score) + 40)
   const hasWrite = storeData?.hasWriteAccess !== false
 
   // Build optimized values from real Shopify fields
@@ -640,23 +652,136 @@ export default function BeforeAfter({ selectedProduct, storeData, setView, produ
   const currentTags = Array.isArray(product.tags) ? product.tags : (product.tags || '').split(',').map(t => t.trim()).filter(Boolean)
   const currentProductType = product.product_type || product.category || ''
 
-  // AI-suggested improvements for real Shopify fields
-  const optimizedTitle = currentTitle.length < 30
-    ? `${currentTitle} — Premium Quality ${catLabel} Product`
+  // Identify failing criteria from the scoring engine
+  const cr = product.criteria_results || {}
+  const failingKeys = Object.entries(cr).filter(([, v]) => !v.passed).map(([k]) => k)
+  const issues = Array.isArray(product.issues) ? product.issues : []
+
+  // Category-specific description suggestions based on what's actually missing
+  const CATEGORY_DESC_FIXES = {
+    health_food: {
+      has_ingredients_list: `\n\nIngredients: Premium whey protein isolate, oats, natural cocoa, honey, chia seeds, vitamin B12.`,
+      has_macros: `\n\nNutrition Facts (per serving): Calories 210 | Protein 20g | Carbs 24g | Fat 6g | Fiber 3g`,
+      has_certifications: `\n\nCertified: Non-GMO verified, Gluten-Free, No artificial preservatives.`,
+      has_allergens: `\n\nAllergen Info: Contains milk and soy. Manufactured in a facility that also processes tree nuts and wheat.`,
+      has_flavor_variants: `\n\nAvailable Flavors: Chocolate, Vanilla, Strawberry, Peanut Butter, Mixed Berry.`,
+      has_serving_info: `\n\nServing Size: 1 bar (60g) | Servings per box: 12`,
+      has_return_policy: `\n\nSatisfaction Guarantee: Full refund within 30 days if you're not satisfied.`,
+    },
+    apparel: {
+      has_size_guide: `\n\nSize Guide: XS (32"), S (34-36"), M (38-40"), L (42-44"), XL (46-48"). Model wears size M.`,
+      has_fabric_material: `\n\nMaterial: 60% cotton, 35% polyester, 5% spandex. Soft, breathable, and durable.`,
+      has_fit_description: `\n\nFit: Regular fit — true to size. Slightly relaxed through the body for everyday comfort.`,
+      has_care_instructions: `\n\nCare: Machine wash cold with like colors. Tumble dry low. Do not bleach or iron directly on print.`,
+      has_gender_age: `\n\nDesigned for: Unisex — suitable for men and women.`,
+      has_color_variants: `\n\nAvailable in multiple colors — see variant selector above.`,
+      has_return_policy: `\n\nReturns: Free exchanges within 30 days. Easy returns, no questions asked.`,
+    },
+    electronics: {
+      has_specs: `\n\nSpecifications: Output 5V/3A, 9V/2A, 12V/1.5A. Total power: 18W. Input: 100-240V AC.`,
+      has_compatibility: `\n\nCompatible with: iPhone 12-16, Samsung Galaxy S21+, iPad, MacBook Air, and all USB-C devices.`,
+      has_battery_power: `\n\nBattery: 5000mAh lithium-polymer. Charges from 0-100% in approximately 2 hours.`,
+      has_connectivity: `\n\nConnectivity: Bluetooth 5.3, USB-C, 3.5mm aux jack. Range up to 10m.`,
+      has_warranty: `\n\nWarranty: 2-year manufacturer warranty included. Dedicated customer support.`,
+      has_return_policy: `\n\nReturns: 30-day hassle-free returns. Full refund if defective.`,
+    },
+    sports_equipment: {
+      has_skill_level: `\n\nSkill Level: Suitable for beginner to intermediate riders. Forgiving flex for easy progression.`,
+      has_size_specs: `\n\nDimensions: Length 155cm | Width 25cm | Weight 3.2kg. Size chart available above.`,
+      has_terrain_use: `\n\nBest For: All-mountain terrain. Versatile for groomed runs, powder, and park.`,
+      has_material_construction: `\n\nConstruction: Lightweight wood core with fiberglass reinforcement. Durable sintered base.`,
+      has_performance_features: `\n\nPerformance: Medium flex rating (5/10), excellent edge grip, vibration dampening for smooth rides.`,
+      has_return_policy: `\n\nReturns: 30-day return window for unused equipment. Free return shipping.`,
+    },
+    beauty_skincare: {
+      has_skin_type: `\n\nSkin Type: Suitable for all skin types including sensitive and combination skin.`,
+      has_key_ingredients: `\n\nKey Ingredients: Hyaluronic acid (hydration), Niacinamide (pore control), Vitamin C (brightening).`,
+      has_certifications: `\n\nCertified: Cruelty-free, vegan, paraben-free, dermatologist tested.`,
+      has_how_to_use: `\n\nHow to Use: Apply 2-3 drops to clean, damp skin morning and evening. Follow with moisturizer.`,
+      has_size_volume: `\n\nSize: 30ml / 1.0 fl oz`,
+      has_return_policy: `\n\nSatisfaction Guarantee: 30-day full refund if not satisfied.`,
+    },
+    home_living: {
+      has_dimensions: `\n\nDimensions: 60cm (L) × 40cm (W) × 80cm (H). Please measure your space before ordering.`,
+      has_material: `\n\nMaterial: Solid wood frame with premium fabric upholstery. Stain-resistant finish.`,
+      has_assembly_info: `\n\nAssembly: Easy 15-minute setup. All tools and hardware included. Step-by-step instructions provided.`,
+      has_care_instructions: `\n\nCare: Wipe clean with a damp cloth. Avoid direct sunlight to prevent fading.`,
+      has_weight_capacity: `\n\nWeight Capacity: Supports up to 120kg (265 lbs).`,
+      has_return_policy: `\n\nReturns: 30-day return policy. Item must be in original packaging.`,
+    },
+    food_beverage: {
+      has_ingredients: `\n\nIngredients: Purified water, natural fruit extract, organic cane sugar, citric acid, natural flavors.`,
+      has_allergens: `\n\nAllergen Info: Free from all major allergens. Produced in a nut-free facility.`,
+      has_nutritional_info: `\n\nNutrition (per serving): Calories 45 | Sugar 8g | Sodium 5mg | Vitamin C 50% DV`,
+      has_storage_info: `\n\nStorage: Store in a cool, dry place. Refrigerate after opening. Best consumed within 5 days of opening.`,
+      has_certifications: `\n\nCertified: USDA Organic, Non-GMO Project Verified, Kosher.`,
+      has_return_policy: `\n\nSatisfaction Guarantee: Full refund if product arrives damaged.`,
+    },
+    baby_kids: {
+      has_age_range: `\n\nAge Range: Recommended for ages 3-8 years.`,
+      has_safety_certifications: `\n\nSafety: BPA-free, non-toxic materials. ASTM F963 and CPSC certified. No small parts — choking hazard free.`,
+      has_material: `\n\nMaterial: Soft, organic cotton exterior. Hypoallergenic filling. Safe for sensitive skin.`,
+      has_dimensions: `\n\nSize: 25cm × 15cm × 10cm. Lightweight and easy for small hands to hold.`,
+      has_care_instructions: `\n\nCare: Machine washable at 30°C. Tumble dry low. Colors stay vibrant wash after wash.`,
+      has_return_policy: `\n\nReturns: 60-day hassle-free returns on all kids' products.`,
+    },
+    general: {
+      has_description: `\n\nAbout this product: High-quality, carefully crafted item designed for everyday use. Built to last with attention to detail and a commitment to customer satisfaction. Perfect for gifting or personal use.`,
+      has_return_policy: `\n\nReturns: Free 30-day returns. If you're not satisfied, we'll refund your purchase in full.`,
+      has_shipping_info: `\n\nShipping: Standard delivery in 5-7 business days. Free shipping on orders over $50. Express options available at checkout.`,
+    },
+  }
+
+  // Category-specific tag suggestions
+  const CATEGORY_TAG_FIXES = {
+    health_food: { has_certifications: ['non-gmo', 'gluten-free'], has_allergens: ['allergen-info'], has_macros: ['high-protein'], has_ingredients_list: ['natural-ingredients'], has_flavor_variants: ['multiple-flavors'], has_return_policy: ['satisfaction-guarantee'], has_serving_info: ['serving-info'] },
+    apparel: { has_size_guide: ['size-guide'], has_fabric_material: ['premium-fabric'], has_care_instructions: ['easy-care'], has_fit_description: ['true-to-size'], has_gender_age: ['unisex'], has_color_variants: ['multi-color'], has_return_policy: ['free-returns'] },
+    electronics: { has_specs: ['tech-specs'], has_compatibility: ['universal-compatible'], has_warranty: ['2-year-warranty'], has_connectivity: ['bluetooth'], has_battery_power: ['long-battery'], has_return_policy: ['free-returns'] },
+    sports_equipment: { has_skill_level: ['all-levels'], has_terrain_use: ['all-mountain'], has_performance_features: ['high-performance'], has_size_specs: ['sized'], has_material_construction: ['durable-build'], has_return_policy: ['free-returns'] },
+    beauty_skincare: { has_certifications: ['cruelty-free', 'vegan'], has_skin_type: ['all-skin-types'], has_key_ingredients: ['clean-beauty'], has_how_to_use: ['easy-apply'], has_size_volume: ['travel-size'], has_return_policy: ['satisfaction-guarantee'] },
+    home_living: { has_assembly_info: ['easy-assembly'], has_material: ['premium-material'], has_dimensions: ['dimensions-listed'], has_care_instructions: ['easy-care'], has_weight_capacity: ['heavy-duty'], has_return_policy: ['free-returns'] },
+    food_beverage: { has_certifications: ['organic', 'non-gmo'], has_allergens: ['allergen-friendly'], has_nutritional_info: ['nutrition-facts'], has_ingredients: ['natural'], has_storage_info: ['pantry-friendly'], has_return_policy: ['satisfaction-guarantee'] },
+    baby_kids: { has_safety_certifications: ['safety-certified', 'bpa-free'], has_age_range: ['kids-friendly'], has_material: ['non-toxic'], has_dimensions: ['sized'], has_care_instructions: ['machine-washable'], has_return_policy: ['free-returns'] },
+    general: { has_tags: ['featured', 'new-arrival', 'best-seller'], has_return_policy: ['free-returns'], has_shipping_info: ['fast-shipping'], has_description: ['quality-product'] },
+  }
+
+  // Gate optimization on having a real description — empty listings get left alone.
+  // We don't invent content for products that have no seed text.
+  const hasContent = currentDesc.trim().length >= 20
+
+  // Build optimized description from failing criteria (only if base content exists)
+  const catDescFixes = CATEGORY_DESC_FIXES[productCat] || {}
+  const descAdditions = hasContent
+    ? failingKeys.filter(k => catDescFixes[k]).map(k => catDescFixes[k])
+    : []
+  const optimizedDesc = descAdditions.length > 0 ? (currentDesc + descAdditions.join('')).trim() : currentDesc
+
+  // Build optimized tags from failing criteria (only if base content exists)
+  const catTagFixes = CATEGORY_TAG_FIXES[productCat] || {}
+  const suggestedTags = hasContent
+    ? failingKeys.flatMap(k => catTagFixes[k] || []).filter(t => !currentTags.includes(t))
+    : []
+  const optimizedTags = [...currentTags, ...suggestedTags]
+
+  // Title — only touch if product has content and title is too short
+  const optimizedTitle = (hasContent && currentTitle.length < 20)
+    ? `${currentTitle} — ${catLabel} | Premium Quality`
     : currentTitle
 
-  const descAdditions = []
-  if (currentDesc.length < 200) descAdditions.push('Crafted with premium quality materials for lasting performance and satisfaction.')
-  if (!/return|refund|exchange/i.test(currentDesc)) descAdditions.push('\n\nReturn Policy: Free returns accepted within 30 days of delivery. Full refund processed within 3-5 business days.')
-  if (!/shipping|delivery|dispatch/i.test(currentDesc)) descAdditions.push('\n\nShipping: Free standard delivery. Arrives in 5-7 business days. Express options available at checkout.')
-  const optimizedDesc = descAdditions.length > 0 ? (currentDesc + '\n\n' + descAdditions.join('')).trim() : currentDesc
-
-  const suggestedTags = ['ai-optimized']
-  if (!/return/i.test(currentTags.join(','))) suggestedTags.push('free-returns')
-  if (!/shipping/i.test(currentTags.join(','))) suggestedTags.push('fast-shipping')
-  const optimizedTags = [...currentTags, ...suggestedTags.filter(t => !currentTags.includes(t))]
-
   const optimizedProductType = currentProductType || catLabel
+
+  // Calculate projected score — only count points for criteria we actually have fixes for.
+  // Citation probability is inherently uncertain, so we apply a confidence factor (~0.7)
+  // rather than assuming every suggestion will land perfectly with every AI model.
+  const fixableKeys = new Set([...Object.keys(catDescFixes), ...Object.keys(catTagFixes)])
+  const crEntries = Object.entries(product.criteria_results || {})
+  const fixablePoints = crEntries.reduce((sum, [k, v]) => {
+    if (v.passed || !fixableKeys.has(k)) return sum
+    return sum + v.max_points
+  }, 0)
+  const currentScore = isNaN(product.score) ? 0 : product.score
+  const effectiveGain = hasContent ? Math.round(fixablePoints * 0.7) : 0
+  const projectedScore = Math.min(currentScore + effectiveGain, 92)
 
   // Build change list for modal
   const changeList = []
@@ -720,6 +845,7 @@ export default function BeforeAfter({ selectedProduct, storeData, setView, produ
       await new Promise(r => setTimeout(r, 400))
 
       setSuccess({
+        productId: product.id,
         scoreBefore: data.new_score - data.score_delta,
         scoreAfter: data.new_score,
         appliedFields: data.applied_fields || [],
@@ -758,7 +884,9 @@ export default function BeforeAfter({ selectedProduct, storeData, setView, produ
   }
 
   // ── SUCCESS STATE ──
-  if (success) {
+  // Only show the success view if it was recorded for the current product.
+  // Stops stale success from a previously-optimized product leaking onto a different product.
+  if (success && String(success.productId) === String(product.id)) {
     const shopifyUrl = storeData?.domain
       ? `https://${storeData.domain}/admin/products/${product.id}`
       : null
@@ -830,14 +958,33 @@ export default function BeforeAfter({ selectedProduct, storeData, setView, produ
       {/* Optimize tab */}
       {tab === 'optimize' && (
         <>
-          {/* Apply to Store button — top */}
-          {hasWrite && (
+          {/* Empty description state — block optimization */}
+          {!hasContent && (
+            <div className="bg-shopify-warning-light border border-shopify-warning rounded-card px-4 py-4">
+              <p className="text-sm text-shopify-warning-text font-semibold mb-1">No description to optimize</p>
+              <p className="text-xs text-shopify-warning-text">
+                This product has no description text yet. Add a product description in Shopify first — the optimizer analyzes existing content to find gaps, it won't invent content from scratch.
+              </p>
+            </div>
+          )}
+
+          {/* Apply to Store button — only when there's content and something changes */}
+          {hasWrite && hasContent && changeList.length > 0 && (
             <button
               onClick={() => setShowModal(true)}
               className="w-full bg-shopify-green hover:bg-shopify-green-dark text-white text-sm font-semibold py-3 rounded-btn transition-colors flex items-center justify-center gap-2"
             >
               &#9889; Apply to Store
             </button>
+          )}
+
+          {/* Already optimized state */}
+          {hasWrite && hasContent && changeList.length === 0 && (
+            <div className="bg-shopify-success-light border border-shopify-green/20 rounded-card px-4 py-3">
+              <p className="text-sm text-shopify-green font-medium">
+                &#10003; This product is already well-optimized. No additional suggestions at this time.
+              </p>
+            </div>
           )}
 
           {/* Write access warning */}
@@ -920,7 +1067,7 @@ export default function BeforeAfter({ selectedProduct, storeData, setView, produ
           </div>
 
           {/* Sticky footer bar */}
-          {hasWrite && (
+          {hasWrite && hasContent && changeList.length > 0 && (
             <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-shopify-border z-40 shadow-card">
               <div className="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
                 <p className="text-sm text-shopify-secondary">

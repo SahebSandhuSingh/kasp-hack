@@ -19,10 +19,10 @@
 // Strip all HTML tags, decode entities, collapse whitespace, and return plain text
 function stripHtml(html) {
   if (!html) return '';
-  
+
   // 1. Remove all HTML tags
   let text = String(html).replace(/<[^>]*>/g, ' ');
-  
+
   // 2. Decode HTML entities
   const entities = {
     '&nbsp;': ' ',
@@ -36,7 +36,7 @@ function stripHtml(html) {
   text = text.replace(/&[#a-z0-9]+;/ig, (match) => {
     return entities[match.toLowerCase()] || ' ';
   });
-  
+
   // 3. Collapse multiple whitespace/newlines into single spaces
   return text.replace(/\s+/g, ' ').trim();
 }
@@ -121,7 +121,7 @@ function detectIssues(product) {
 
   // 5. missing_specifications (MEDIUM)
   const specKeywords = ['dimensions', 'weight', 'size', 'material', 'compatibility', 'specs',
-                        'ingredients', 'ingredient'];
+    'ingredients', 'ingredient'];
   const hasSpecs = textContainsAny(bodyText, specKeywords) || !!(product.ingredients);
   if (!hasSpecs) {
     issues.push({

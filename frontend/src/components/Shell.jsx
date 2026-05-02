@@ -49,7 +49,6 @@ const NAV_ITEMS = [
   { id: 'products',    label: 'Products',  icon: icons.products },
   { id: 'beforeafter', label: 'Optimize',  icon: icons.optimize },
   { id: 'simulate',    label: 'Simulate',  icon: icons.simulate },
-  { id: 'analytics',   label: 'Analytics', icon: icons.analytics },
 ]
 
 export default function Shell({ view, setView, storeData, onDisconnect, children }) {

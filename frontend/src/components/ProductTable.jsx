@@ -46,7 +46,7 @@ function CategoryBadge({ product, onOverride }) {
   const label = CATEGORY_LABELS[cat] || 'General'
 
   const borderStyle = conf === 'high' ? 'solid' : conf === 'medium' ? 'dashed' : 'dashed'
-  const suffix = conf === 'low' ? '?' : ''
+  const suffix = (conf === 'low' && cat !== 'general') ? '?' : ''
 
   return (
     <div className="relative">

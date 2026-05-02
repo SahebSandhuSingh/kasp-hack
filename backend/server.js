@@ -126,8 +126,9 @@ async function resolveAccessToken(storeDomain, clientId, clientSecret) {
       { headers: { 'Content-Type': 'application/json' } }
     );
     const accessToken = tokenResp.data.access_token;
+    const scopeStr = tokenResp.data.scope || '';
     const verified = await verifyShopifyConnection(storeDomain, accessToken);
-    return { accessToken, shop: verified.data.shop };
+    return { accessToken, scope: scopeStr, shop: verified.data.shop };
   } catch (oauthErr) {
     console.warn('OAuth client_credentials exchange failed:', oauthErr.response?.status, oauthErr.response?.data || oauthErr.message);
     // Fall through to direct auth if OAuth exchange fails
@@ -136,41 +137,25 @@ async function resolveAccessToken(storeDomain, clientId, clientSecret) {
   // 2. Fallback: try using clientSecret directly as access token (shpat_ tokens)
   try {
     const direct = await verifyShopifyConnection(storeDomain, clientSecret);
-    return { accessToken: clientSecret, shop: direct.data.shop };
+    return { accessToken: clientSecret, scope: '', shop: direct.data.shop };
   } catch (directErr) {
     console.error('Direct token fallback also failed:', directErr.response?.status, directErr.response?.data || directErr.message);
     throw directErr;
   }
 }
 
-async function checkScopeStatus(storeDomain, accessToken) {
+function checkScopeStatus(scopeStr) {
+  const scopes = (scopeStr || '').split(',').map(s => s.trim()).filter(Boolean);
   const required = ["read_products"];
   const recommended = ["write_products", "read_orders"];
-  try {
-    const resp = await axios.get(
-      `https://${storeDomain}/admin/api/2024-01/access_scopes.json`,
-      { headers: { 'X-Shopify-Access-Token': accessToken } }
-    );
-    const scopes = (resp.data.access_scopes || []).map(s => s.handle);
 
-    return {
-      has_read_products: scopes.includes("read_products"),
-      has_write_products: scopes.includes("write_products"),
-      has_read_orders: scopes.includes("read_orders"),
-      missing_required: required.filter(scope => !scopes.includes(scope)),
-      missing_recommended: recommended.filter(scope => !scopes.includes(scope))
-    };
-  } catch (err) {
-    console.warn('Scope check failed (non-fatal):', err.response?.status, err.message);
-    // If scope check fails, assume minimal access based on what we know
-    return {
-      has_read_products: true,
-      has_write_products: false,
-      has_read_orders: false,
-      missing_required: [],
-      missing_recommended: recommended
-    };
-  }
+  return {
+    has_read_products: scopes.includes("read_products") || scopes.includes("write_products"),
+    has_write_products: scopes.includes("write_products"),
+    has_read_orders: scopes.includes("read_orders"),
+    missing_required: required.filter(scope => scope === "read_products" ? !(scopes.includes("read_products") || scopes.includes("write_products")) : !scopes.includes(scope)),
+    missing_recommended: recommended.filter(scope => !scopes.includes(scope))
+  };
 }
 
 function startBackgroundSync(storeDomain, accessToken) {
@@ -405,8 +390,8 @@ app.post('/api/auth/connect', async (req, res) => {
   if (Object.keys(errors).length > 0) return res.status(400).json({ errors });
 
   try {
-    const { accessToken, shop } = await resolveAccessToken(storeDomain, clientId, clientSecret);
-    const scopeStatus = await checkScopeStatus(storeDomain, accessToken);
+    const { accessToken, scope, shop } = await resolveAccessToken(storeDomain, clientId, clientSecret);
+    const scopeStatus = checkScopeStatus(scope);
 
     if (scopeStatus.missing_required.length > 0) {
       return res.status(403).json({
@@ -503,6 +488,9 @@ app.get('/api/audit', requireAuth, async (req, res) => {
         matched_signals: p.matched_signals,
         criteria_results: p.criteria_results,
         status: p.score >= 70 ? 'optimized' : p.score >= 40 ? 'needs-work' : 'critical',
+        description: p.description,
+        raw_html: p.raw_html,
+        product_type: p.product_type,
         price: p.price,
         image: p.image,
         tags: p.tags

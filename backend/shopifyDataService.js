@@ -37,19 +37,22 @@ async function fetchAndScoreProducts(storeDomain, accessToken) {
   const scored = rawProducts.map(p => {
     const result = scoreProduct(p);
     return {
-      product_id:          p.id.toString(),
-      product_title:       p.title,
-      score:               result.score,
-      issues:              result.issues,
-      issues_count:        result.issues_count,
-      category:            result.category,
+      product_id: p.id.toString(),
+      product_title: p.title,
+      score: result.score,
+      issues: result.issues,
+      issues_count: result.issues_count,
+      category: result.category,
       category_confidence: result.category_confidence,
-      matched_signals:     result.matched_signals,
-      criteria_results:    result.criteria_results,
-      store_domain:        clean,
-      price:               p.variants?.[0]?.price || '0',
-      image:               p.images?.[0]?.src || null,
-      tags:                p.tags ? p.tags.split(',').map(t => t.trim()).filter(Boolean) : [],
+      matched_signals: result.matched_signals,
+      criteria_results: result.criteria_results,
+      store_domain: clean,
+      description: p.body_html ? String(p.body_html).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim() : '',
+      raw_html: p.body_html || '',
+      product_type: p.product_type || '',
+      price: p.variants?.[0]?.price || '0',
+      image: p.images?.[0]?.src || null,
+      tags: p.tags ? p.tags.split(',').map(t => t.trim()).filter(Boolean) : [],
     };
   });
 
@@ -87,16 +90,16 @@ async function fetchSalesData(storeDomain, accessToken) {
       if (!pid) continue;
       if (!productMap[pid]) {
         productMap[pid] = {
-          product_id:    pid,
+          product_id: pid,
           product_title: item.title,
-          revenue:       0,
-          orders_count:  0,
-          store_domain:  clean,
-          period_start:  since,
-          period_end:    today(),
+          revenue: 0,
+          orders_count: 0,
+          store_domain: clean,
+          period_start: since,
+          period_end: today(),
         };
       }
-      productMap[pid].revenue      += parseFloat(item.price) * item.quantity;
+      productMap[pid].revenue += parseFloat(item.price) * item.quantity;
       productMap[pid].orders_count += 1;
     }
   }
