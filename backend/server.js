@@ -131,16 +131,7 @@ async function resolveAccessToken(storeDomain, clientId, clientSecret) {
     return { accessToken, scope: scopeStr, shop: verified.data.shop };
   } catch (oauthErr) {
     console.warn('OAuth client_credentials exchange failed:', oauthErr.response?.status, oauthErr.response?.data || oauthErr.message);
-    // Fall through to direct auth if OAuth exchange fails
-  }
-
-  // 2. Fallback: try using clientSecret directly as access token (shpat_ tokens)
-  try {
-    const direct = await verifyShopifyConnection(storeDomain, clientSecret);
-    return { accessToken: clientSecret, scope: '', shop: direct.data.shop };
-  } catch (directErr) {
-    console.error('Direct token fallback also failed:', directErr.response?.status, directErr.response?.data || directErr.message);
-    throw directErr;
+    throw oauthErr;
   }
 }
 
@@ -161,7 +152,8 @@ function checkScopeStatus(scopeStr) {
 function startBackgroundSync(storeDomain, accessToken) {
   (async () => {
     try {
-      const { scored } = await fetchAndScoreProducts(storeDomain, accessToken);
+      const freshToken = await getAccessToken();
+      const { scored } = await fetchAndScoreProducts(storeDomain, freshToken);
       const date = today();
       const snapStmt = db.prepare(`INSERT INTO score_snapshots (product_id, product_title, score, issues_count, snapshot_date, store_domain, category) VALUES (?, ?, ?, ?, ?, ?, ?)`);
       db.transaction((snaps) => {
@@ -169,13 +161,13 @@ function startBackgroundSync(storeDomain, accessToken) {
       })(scored);
 
       try {
-        const salesData = await fetchSalesData(storeDomain, accessToken);
+        const salesData = await fetchSalesData(storeDomain, freshToken);
         const salesStmt = db.prepare(`INSERT INTO product_sales (product_id, product_title, revenue, orders_count, period_start, period_end, store_domain) VALUES (?, ?, ?, ?, ?, ?, ?)`);
         db.transaction((items) => {
           for (const item of items) salesStmt.run(item.product_id, item.product_title, item.revenue, item.orders_count, item.period_start, item.period_end, item.store_domain);
         })(salesData);
       } catch (salesErr) {
-        console.warn('Sales sync skipped (token may lack read_orders scope):', salesErr.message);
+        // Sales sync requires Shopify protected customer data approval — skipped silently
       }
       console.log(`Background sync complete for ${storeDomain}`);
     } catch (e) {
@@ -378,15 +370,13 @@ app.get('/api/health', (req, res) => {
 
 // POST /api/auth/connect — connect Shopify store and save credentials in session
 app.post('/api/auth/connect', async (req, res) => {
-  const { store_domain, client_id, client_secret } = req.body;
+  const { store_domain } = req.body;
   const errors = {};
   const storeDomain = normalizeStoreDomain(store_domain);
-  const clientId = (client_id || '').trim();
-  const clientSecret = (client_secret || '').trim();
+  const clientId = (process.env.SHOPIFY_CLIENT_ID || '').trim();
+  const clientSecret = (process.env.SHOPIFY_CLIENT_SECRET || '').trim();
 
   if (!storeDomain || !storeDomain.endsWith('.myshopify.com')) errors.store_domain = "Store URL must be a .myshopify.com domain.";
-  if (!clientId) errors.client_id = "Client ID is required.";
-  if (!clientSecret) errors.client_secret = "Client Secret is required.";
   if (Object.keys(errors).length > 0) return res.status(400).json({ errors });
 
   try {
@@ -1102,20 +1092,21 @@ setInterval(async () => {
 
       console.log(`\n[CRON] Daily sync triggered for ${cleanDomain}...`);
 
-      const { scored } = await fetchAndScoreProducts(domain, accessToken);
+      const freshToken = await getAccessToken();
+      const { scored } = await fetchAndScoreProducts(domain, freshToken);
       const snapStmt = db.prepare(`INSERT INTO score_snapshots (product_id, product_title, score, issues_count, snapshot_date, store_domain, category) VALUES (?, ?, ?, ?, ?, ?, ?)`);
       db.transaction((snaps) => {
         for (const snap of snaps) snapStmt.run(snap.product_id, snap.product_title, snap.score, snap.issues_count || 0, currentDate, cleanDomain, snap.category || 'general');
       })(scored);
 
       try {
-        const salesData = await fetchSalesData(domain, accessToken);
+        const salesData = await fetchSalesData(domain, freshToken);
         const salesStmt = db.prepare(`INSERT INTO product_sales (product_id, product_title, revenue, orders_count, period_start, period_end, store_domain) VALUES (?, ?, ?, ?, ?, ?, ?)`);
         db.transaction((items) => {
           for (const item of items) salesStmt.run(item.product_id, item.product_title, item.revenue, item.orders_count, item.period_start, item.period_end, item.store_domain);
         })(salesData);
       } catch (salesErr) {
-        console.warn(`[CRON] Sales sync skipped for ${cleanDomain}:`, salesErr.message);
+        // Sales sync requires Shopify protected customer data approval — skipped silently
       }
 
       console.log(`[CRON] Sync complete for ${cleanDomain}`);
