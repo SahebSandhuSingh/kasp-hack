@@ -185,12 +185,12 @@ const RUBRICS = {
   health_food: [
     {
       key: 'has_ingredients_list', points: 20, label: 'Ingredients List',
-      check: (p) => containsAny(p.body_html || '', ['whey', 'protein isolate', 'oats', 'fiber', 'vitamin', 'mineral', 'sugar', 'extract', 'acid', 'syrup', 'oil', 'calcium']).length >= 3,
-      missing_msg: "No specific ingredients listed (needs at least 3) — AI assistants can't answer 'what's in this?' queries"
+      check: (p) => containsAny(p.body_html || '', ['ingredient', 'whey', 'protein isolate', 'oats', 'fiber', 'vitamin', 'mineral']).length > 0,
+      missing_msg: "No ingredients listed — AI assistants can't answer 'what's in this?' queries"
     },
     {
       key: 'has_macros', points: 15, label: 'Nutritional Macros',
-      check: (p) => { const matches = stripHtml(p.body_html || '').match(/\d+\s*(?:g|mg|kcal|cal|protein|carb|fat)/ig); return matches && matches.length >= 2; },
+      check: (p) => /\d+\s*(?:g|mg|kcal|cal|protein|carb|fat)/i.test(stripHtml(p.body_html || '')),
       missing_msg: 'No nutritional info — critical for health-conscious AI shopping queries'
     },
     {
@@ -227,13 +227,13 @@ const RUBRICS = {
   apparel: [
     {
       key: 'has_size_guide', points: 20, label: 'Size Guide',
-      check: (p) => containsAny(p.body_html || '', ['size chart', 'size guide', 's/m/l', 'xs', 'xl', 'xxl', 'size:']).length > 0 && /\b(small|medium|large)\b/i.test(stripHtml(p.body_html || '')),
-      missing_msg: 'No specific size guide — #1 reason shoppers abandon apparel'
+      check: (p) => containsAny(p.body_html || '', ['size chart', 'size guide', 's/m/l', 'xs', 'xl', 'xxl', 'size:']).length > 0 || /\b(small|medium|large)\b/i.test(stripHtml(p.body_html || '')),
+      missing_msg: 'No size guide — #1 reason shoppers abandon apparel'
     },
     {
       key: 'has_fabric_material', points: 20, label: 'Fabric & Material',
-      check: (p) => /\d+%\s*\w+/.test(stripHtml(p.body_html || '')) || containsAny(p.body_html || '', ['cotton', 'polyester', 'linen', 'silk', 'wool', 'nylon', 'rayon', 'spandex', 'blend']).length >= 2,
-      missing_msg: "No detailed material info (needs % or multiple fabrics) — AI can't answer 'what's it made of?'"
+      check: (p) => /\d+%\s*\w+/.test(stripHtml(p.body_html || '')) || containsAny(p.body_html || '', ['cotton', 'polyester', 'linen', 'silk', 'wool', 'nylon', 'rayon', 'spandex', 'blend']).length > 0,
+      missing_msg: "No material info — AI can't answer 'what's it made of?'"
     },
     {
       key: 'has_fit_description', points: 15, label: 'Fit Description',
@@ -264,13 +264,13 @@ const RUBRICS = {
   electronics: [
     {
       key: 'has_specs', points: 25, label: 'Technical Specifications',
-      check: (p) => { const matches = stripHtml(p.body_html || '').match(/\d+\s*(?:mhz|ghz|gb|tb|mb|watts?|volts?|mah|inch|cm|mm)/ig); return matches && matches.length >= 2; },
-      missing_msg: 'No technical specifications (needs at least 2 values) — critical for electronics buyers'
+      check: (p) => /\d+\s*(?:mhz|ghz|gb|tb|mb|watts?|volts?|mah|inch|cm|mm)/i.test(stripHtml(p.body_html || '')),
+      missing_msg: 'No technical specifications — critical for electronics buyers'
     },
     {
       key: 'has_compatibility', points: 20, label: 'Compatibility Info',
-      check: (p) => containsAny(p.body_html || '', ['compatible with', 'works with', 'supports', 'fits', 'for iphone', 'for android', 'for mac', 'for windows']).length >= 2 || (containsAny(p.body_html || '', ['compatible', 'works with']).length > 0 && wordCount(p.body_html || '') > 80),
-      missing_msg: 'No detailed compatibility info — top electronics query'
+      check: (p) => containsAny(p.body_html || '', ['compatible with', 'works with', 'supports', 'fits', 'for iphone', 'for android', 'for mac', 'for windows']).length > 0,
+      missing_msg: 'No compatibility info — top electronics query'
     },
     {
       key: 'has_battery_power', points: 15, label: 'Battery/Power Info',
@@ -301,8 +301,8 @@ const RUBRICS = {
     },
     {
       key: 'has_size_specs', points: 20, label: 'Size & Dimensions',
-      check: (p) => /\d+\s*(?:cm|mm|inch|inches|lbs?|kg|feet|ft)/i.test(stripHtml(p.body_html || '')),
-      missing_msg: 'No specific size/dimension specs with units'
+      check: (p) => /\d+\s*(?:cm|mm|inch|inches|lbs?|kg|feet|ft)/i.test(stripHtml(p.body_html || '')) || containsAny(p.body_html || '', ['dimensions', 'size guide', 'length', 'width', 'weight']).length > 0,
+      missing_msg: 'No size/dimension specs'
     },
     {
       key: 'has_terrain_use', points: 15, label: 'Terrain/Use Case',
@@ -311,8 +311,8 @@ const RUBRICS = {
     },
     {
       key: 'has_material_construction', points: 15, label: 'Material & Construction',
-      check: (p) => containsAny(p.body_html || '', ['carbon', 'aluminum', 'steel', 'foam', 'rubber', 'nylon', 'leather', 'plastic']).length > 0,
-      missing_msg: 'No specific material or construction details'
+      check: (p) => containsAny(p.body_html || '', ['material', 'construction', 'built with', 'made from', 'carbon', 'aluminum', 'steel', 'foam']).length > 0,
+      missing_msg: 'No material or construction details'
     },
     {
       key: 'has_performance_features', points: 15, label: 'Performance Features',
@@ -328,13 +328,13 @@ const RUBRICS = {
   beauty_skincare: [
     {
       key: 'has_skin_type', points: 20, label: 'Skin Type',
-      check: (p) => containsAny(p.body_html || '', ['oily', 'dry', 'combination', 'sensitive', 'all skin types', 'normal skin', 'acne-prone']).length > 0 && wordCount(p.body_html || '') > 80,
-      missing_msg: 'No detailed skin type description — top skincare AI query'
+      check: (p) => containsAny(p.body_html || '', ['oily', 'dry', 'combination', 'sensitive', 'all skin types', 'normal skin', 'acne-prone']).length > 0,
+      missing_msg: 'No skin type — top skincare AI query'
     },
     {
       key: 'has_key_ingredients', points: 20, label: 'Key Ingredients',
-      check: (p) => containsAny(p.body_html || '', ['retinol', 'hyaluronic', 'vitamin c', 'niacinamide', 'salicylic', 'glycolic', 'peptide', 'ceramide', 'collagen', 'acid', 'extract']).length >= 2,
-      missing_msg: 'No specific key ingredients listed (needs at least 2)'
+      check: (p) => containsAny(p.body_html || '', ['retinol', 'hyaluronic', 'vitamin c', 'niacinamide', 'salicylic', 'glycolic', 'peptide', 'ceramide', 'collagen']).length > 0,
+      missing_msg: 'No key ingredients listed'
     },
     {
       key: 'has_certifications', points: 15, label: 'Certifications',
@@ -365,13 +365,13 @@ const RUBRICS = {
   home_living: [
     {
       key: 'has_dimensions', points: 25, label: 'Dimensions',
-      check: (p) => { const matches = stripHtml(p.body_html || '').match(/\d+\s*(?:cm|mm|inch|inches|feet|ft|m)\b/ig); return matches && matches.length >= 2; },
-      missing_msg: 'No specific dimensions (needs at least 2 measurements) — critical for furniture/home products'
+      check: (p) => /\d+\s*(?:cm|mm|inch|inches|feet|ft|m)\b/i.test(stripHtml(p.body_html || '')),
+      missing_msg: 'No dimensions — critical for furniture/home products'
     },
     {
       key: 'has_material', points: 20, label: 'Material Info',
-      check: (p) => containsAny(p.body_html || '', ['wood', 'metal', 'glass', 'fabric', 'ceramic', 'plastic', 'bamboo', 'cotton', 'leather', 'marble']).length > 0,
-      missing_msg: 'No specific material info'
+      check: (p) => containsAny(p.body_html || '', ['material', 'wood', 'metal', 'glass', 'fabric', 'ceramic', 'plastic', 'bamboo', 'finish']).length > 0,
+      missing_msg: 'No material info'
     },
     {
       key: 'has_assembly_info', points: 15, label: 'Assembly Info',
@@ -397,8 +397,8 @@ const RUBRICS = {
   food_beverage: [
     {
       key: 'has_ingredients', points: 25, label: 'Ingredients List',
-      check: (p) => containsAny(p.body_html || '', ['sugar', 'salt', 'water', 'oil', 'flour', 'syrup', 'extract', 'acid', 'whey', 'cocoa', 'milk', 'soy']).length >= 3,
-      missing_msg: 'No specific ingredients (needs at least 3) — legally and commercially critical'
+      check: (p) => containsAny(p.body_html || '', ['ingredient', 'contains', 'made with', 'brewed with']).length > 0,
+      missing_msg: 'No ingredients — legally and commercially critical'
     },
     {
       key: 'has_allergens', points: 20, label: 'Allergen Info',
@@ -407,8 +407,8 @@ const RUBRICS = {
     },
     {
       key: 'has_nutritional_info', points: 20, label: 'Nutritional Info',
-      check: (p) => { const matches = stripHtml(p.body_html || '').match(/\d+\s*(?:cal|kcal|g|mg|protein|carb|fat)/ig); return matches && matches.length >= 2; },
-      missing_msg: 'No detailed nutritional information (needs at least 2 values)'
+      check: (p) => /\d+\s*(?:cal|kcal|g|mg|protein|carb|fat)/i.test(stripHtml(p.body_html || '')),
+      missing_msg: 'No nutritional information'
     },
     {
       key: 'has_storage_info', points: 15, label: 'Storage Instructions',
@@ -429,8 +429,8 @@ const RUBRICS = {
   baby_kids: [
     {
       key: 'has_age_range', points: 25, label: 'Age Range',
-      check: (p) => /\d+\s*(?:months?|years?|yrs?|\+)/i.test(stripHtml(p.body_html || '') + ' ' + (p.title || '')),
-      missing_msg: 'No specific age range with numbers — parents always filter by this'
+      check: (p) => /\d+\s*(?:months?|years?|yrs?|\+)/i.test(stripHtml(p.body_html || '') + ' ' + (p.title || '')) || containsAny(p.body_html || '', ['age range', 'ages', 'suitable for']).length > 0,
+      missing_msg: 'No age range — parents always filter by this'
     },
     {
       key: 'has_safety_certifications', points: 25, label: 'Safety Certifications',
@@ -439,13 +439,13 @@ const RUBRICS = {
     },
     {
       key: 'has_material', points: 20, label: 'Material Info',
-      check: (p) => containsAny(p.body_html || '', ['cotton', 'wood', 'plastic', 'silicone', 'fabric', 'plush', 'fleece']).length > 0,
-      missing_msg: 'No specific material info'
+      check: (p) => containsAny(p.body_html || '', ['material', 'cotton', 'wood', 'plastic', 'silicone', 'fabric', 'soft']).length > 0,
+      missing_msg: 'No material info'
     },
     {
       key: 'has_dimensions', points: 15, label: 'Size/Dimensions',
-      check: (p) => /\d+\s*(?:cm|mm|inch|inches)/i.test(stripHtml(p.body_html || '')),
-      missing_msg: 'No specific size info with units'
+      check: (p) => /\d+\s*(?:cm|mm|inch|inches)/i.test(stripHtml(p.body_html || '')) || containsAny(p.body_html || '', ['size', 'dimensions']).length > 0,
+      missing_msg: 'No size info'
     },
     {
       key: 'has_care_instructions', points: 15, label: 'Care Instructions',
@@ -456,23 +456,23 @@ const RUBRICS = {
   general: [
     {
       key: 'has_description', points: 25, label: 'Detailed Description',
-      check: (p) => wordCount(p.body_html || '') > 100,
-      missing_msg: 'Description too short (needs >100 words)'
+      check: (p) => wordCount(p.body_html || '') > 50,
+      missing_msg: 'Description too short'
     },
     {
       key: 'has_return_policy', points: 20, label: 'Return Policy',
-      check: (p) => containsAny(p.body_html || '', ['return', 'refund', 'money back', 'exchange']).length > 0 && wordCount(p.body_html || '') > 60,
-      missing_msg: 'No return policy or description too short'
+      check: (p) => containsAny(p.body_html || '', ['return', 'refund', 'money back']).length > 0,
+      missing_msg: 'No return policy'
     },
     {
       key: 'has_shipping_info', points: 20, label: 'Shipping Info',
-      check: (p) => containsAny(p.body_html || '', ['shipping', 'delivery', 'free delivery', 'ships within', 'dispatch']).length > 0 && wordCount(p.body_html || '') > 60,
-      missing_msg: 'No shipping information or description too short'
+      check: (p) => containsAny(p.body_html || '', ['shipping', 'delivery', 'free delivery', 'ships within']).length > 0,
+      missing_msg: 'No shipping information'
     },
     {
       key: 'has_tags', points: 15, label: 'Product Tags',
-      check: (p) => { const tags = p.tags ? p.tags.split(',').filter(Boolean) : []; return tags.length > 5; },
-      missing_msg: 'Fewer than 5 product tags'
+      check: (p) => { const tags = p.tags ? p.tags.split(',').filter(Boolean) : []; return tags.length > 3; },
+      missing_msg: 'Fewer than 3 product tags'
     },
     {
       key: 'has_images', points: 10, label: 'Multiple Images',
@@ -489,38 +489,6 @@ const RUBRICS = {
 
 function getRubric(category) {
   return RUBRICS[category] || RUBRICS.general;
-}
-
-// ─────────────────────────────────────────
-// 2.5 COMPLETENESS DEDUCTIONS
-// ─────────────────────────────────────────
-function applyCompletenessDeductions(score, product) {
-  let deduction = 0;
-
-  // Short description penalty
-  const wc = wordCount(product.body_html);
-  if (wc < 30)       deduction += 20;
-  else if (wc < 60)  deduction += 10;
-  else if (wc < 100) deduction += 5;
-
-  // No tags at all
-  const tagsArr = product.tags ? product.tags.split(',').filter(Boolean) : [];
-  if (tagsArr.length === 0) deduction += 10;
-
-  // Only one image
-  const imagesArr = product.images || [];
-  if (imagesArr.length <= 1) deduction += 8;
-
-  // Title too generic (under 3 words)
-  const titleWords = (product.title || product.name || '')
-    .split(' ').filter(Boolean).length;
-  if (titleWords < 3) deduction += 5;
-
-  // Price suspiciously low (likely a placeholder)
-  const price = parseFloat(product.price || 0);
-  if (price <= 0) deduction += 10;
-
-  return Math.max(0, score - deduction);
 }
 
 // ─────────────────────────────────────────
@@ -557,11 +525,8 @@ function scoreProduct(product) {
     }
   }
 
-  score = applyCompletenessDeductions(score, product);
-  score = Math.min(92, score);
-
   return {
-    score: score,
+    score: Math.min(score, 100),
     issues,
     issues_count: issues.length,
     category,
@@ -580,7 +545,11 @@ function scoreToAICitationProbability(score, isPrediction = false) {
   else if (score <= 85) probability = Math.round(85 + (score - 70) * 0.8);
   else probability = Math.round(97 + (score - 85) * 0.2);
 
-  probability = Math.min(91, Math.max(1, probability));
+  if (isPrediction) {
+    probability = Math.min(91, Math.max(1, probability));
+  } else {
+    probability = Math.min(99, Math.max(1, probability));
+  }
 
   return {
     probability,

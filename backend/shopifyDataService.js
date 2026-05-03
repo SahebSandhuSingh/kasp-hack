@@ -70,16 +70,26 @@ async function fetchSalesData(storeDomain, accessToken) {
   let url = `https://${clean}/admin/api/2024-01/orders.json?status=any&limit=250&created_at_min=${since}T00:00:00Z`;
 
   // Handle pagination
-  while (url) {
-    const resp = await axios.get(url, {
-      headers: { 'X-Shopify-Access-Token': accessToken }
-    });
-    allOrders = allOrders.concat(resp.data.orders || []);
+  try {
+    while (url) {
+      const resp = await axios.get(url, {
+        headers: { 'X-Shopify-Access-Token': accessToken }
+      });
+      allOrders = allOrders.concat(resp.data.orders || []);
 
-    // Shopify pagination via Link header
-    const link = resp.headers['link'] || '';
-    const nextMatch = link.match(/<([^>]+)>;\s*rel="next"/);
-    url = nextMatch ? nextMatch[1] : null;
+      // Shopify pagination via Link header
+      const link = resp.headers['link'] || '';
+      const nextMatch = link.match(/<([^>]+)>;\s*rel="next"/);
+      url = nextMatch ? nextMatch[1] : null;
+    }
+  } catch (err) {
+    const status = err.response?.status;
+    // 401/402/403 → token lacks read_orders or protected-customer-data approval.
+    // This is expected on most dev stores. Silently skip sales enrichment.
+    if (status === 401 || status === 402 || status === 403) {
+      return [];
+    }
+    throw err;
   }
 
   // Group by product_id
